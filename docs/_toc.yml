@@ -1,0 +1,15 @@
+# Table of contents for Jupyter Book
+# All paths are relative to the docs/ directory
+format: jb-book
+root: intro
+
+chapters:
+  - file: installation
+  - file: tutorials/01_basic_solver
+    title: Basic Solver Usage
+  - file: tutorials/02_data_loading
+    title: Loading Data
+  - file: cookbook
+    title: Cookbook
+  - file: api/reference
+    title: API Reference

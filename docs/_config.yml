@@ -1,0 +1,67 @@
+# Jupyter Book Configuration for v2.x
+# This file configures Jupyter Book to build documentation with executable code cells
+
+title: Atom - Atomic DFT Solver
+author: Qihao Cheng, Shubhang Trivedi, Phanish Suryanarayana
+logo: ../logo.png
+
+# Execution configuration - execute notebooks during build
+execute:
+  execute_notebooks: "force"  # Force execution of all notebooks
+  timeout: 600                 # Timeout in seconds
+  allow_errors: false         # Don't allow errors (ensures code is correct)
+  cache: ""                   # Don't use cache, always re-execute
+
+# HTML output configuration
+html:
+  use_jupyterlab: false
+  sphinx:
+    config:
+      html_theme: "sphinx_book_theme"
+      html_theme_options:
+        repository_url: "https://github.com/phanish-suryanarayana/atom"
+        repository_branch: "main"
+        path_to_docs: "docs"
+        use_repository_button: true
+        use_edit_page_button: true
+        use_issues_button: true
+        show_navbar_depth: 2
+        show_toc_level: 2
+        # Enable Thebe for interactive code cells
+        launch_buttons:
+          thebe: true
+      
+      # Extensions
+      extensions:
+        - "myst_nb"
+        - "sphinx_design"
+        - "sphinx_copybutton"
+        - "sphinx_thebe"
+      
+      # Thebe configuration - enables interactive code execution
+      thebe_config:
+        repository:
+          url: "https://github.com/phanish-suryanarayana/atom"
+          branch: "main"
+        binderhub_url: "https://mybinder.org"
+        # Requirements file for Binder (relative to repository root)
+        requirements_file: "docs/requirements-binder.txt"
+      
+      # MyST extensions
+      myst_enable_extensions:
+        - "colon_fence"
+        - "dollarmath"
+        - "amsmath"
+        - "deflist"
+        - "html_admonition"
+        - "html_image"
+        - "linkify"
+        - "replacements"
+        - "smartquotes"
+        - "substitution"
+        - "tasklist"
+      
+      # Notebook execution configuration
+      nb_execution_mode: "force"  # Force execution during build
+      nb_execution_timeout: 600
+      nb_execution_allow_errors: false

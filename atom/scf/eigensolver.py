@@ -1,0 +1,98 @@
+from __future__ import annotations
+import numpy as np
+from scipy.sparse.linalg import eigsh, LinearOperator
+from scipy.linalg import eigh
+from typing import Optional
+
+
+class EigenSolver:
+    """
+    Simplified eigenvalue solver matching reference implementation.
+    
+    For SCAN/RSCAN/R2SCAN: uses LinearOperator + eigsh
+    For others: uses eigh with subset_by_index
+    """
+    
+    def __init__(self, xc_functional: Optional[str] = None):
+        """
+        Initialize eigenvalue solver.
+        
+        Parameters
+        ----------
+        xc_functional : str, optional
+            XC functional name (e.g., 'SCAN', 'RSCAN', 'R2SCAN', 'GGA_PBE')
+        """
+        self.xc_functional = xc_functional
+    
+
+    @staticmethod
+    def solve_full(H: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Solve for all eigenvalues and eigenvectors.
+        """
+        return np.linalg.eigh(H, UPLO='L')
+
+
+    def solve_lowest(self, H: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Solve for k lowest eigenvalues and eigenvectors.
+        
+        Parameters
+        ----------
+        H : np.ndarray
+            Hamiltonian matrix (symmetric/Hermitian)
+        k : int
+            Number of lowest eigenvalues to compute
+        
+        Returns
+        -------
+        eigenvalues : np.ndarray
+            k lowest eigenvalues (sorted in ascending order)
+        eigenvectors : np.ndarray
+            Corresponding eigenvectors, shape (n, k)
+        """
+        n = H.shape[0]
+        
+        # Use LinearOperator + eigsh for SCAN/R2SCAN
+        if self.xc_functional in ['SCAN', 'R2SCAN']:
+            def matvec(x):
+                return H @ x
+            
+            H_op = LinearOperator((n, n), matvec=matvec, dtype=np.float64)
+            k_solve = n - 1
+            
+            eigvals, eigvecs = eigsh(H_op, k=k_solve, which='SA', tol=1e-14)
+            
+            # Sort and return only k eigenvalues
+            sort_idx = np.argsort(eigvals)
+            return eigvals[sort_idx][:k], eigvecs[:, sort_idx][:, :k]
+        
+        # Use eigh with subset_by_index for others (reference: subset_by_index=[0, k-1])
+        else:
+            eigvals, eigvecs = eigh(
+                H,
+                subset_by_index=[0, k-1],
+                check_finite=False,
+                driver='evr'
+            )
+            return eigvals, eigvecs
+
+
+    def solve_generalized_full(self, H: np.ndarray, S: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Solve for all eigenvalues and eigenvectors of the generalized eigenvalue problem Hx = λSx.
+        """
+        return eigh(H, S, check_finite=False, driver='gv')
+
+
+    def solve_generalized_lowest(self, H: np.ndarray, S: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Solve for k lowest eigenvalues and eigenvectors of the generalized eigenvalue problem Hx = λSx.
+        
+        Note: 'gv' driver supports generalized eigenvalue problems but not subset_by_index,
+        so we compute all eigenvalues and select the k lowest ones.
+        """
+        # Compute all eigenvalues (gv driver doesn't support subset_by_index)
+        eigvals, eigvecs = eigh(H, S, check_finite=False, driver='gv')
+        # Return only the k lowest eigenvalues and corresponding eigenvectors
+        return eigvals[:k], eigvecs[:, :k]

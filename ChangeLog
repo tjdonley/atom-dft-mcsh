@@ -1,0 +1,77 @@
+----------------
+-Date
+-Name
+-changes
+
+----------------
+Feb 12, 2026
+Name: Qihao Cheng
+Changes: (atom/scf/driver.py)
+1. Fix `full_eigen_energies` to be computed at the converged SCF state; clarify full-spectrum helper API.
+
+
+----------------
+Feb 11, 2026
+Name: Qihao Cheng
+Changes: (atom/xc/hf.py, atom/data/*, atom/scf/*, atom/mesh/*, atom/utils/periodic.py, pyproject.toml, README.md, logo.png)
+1. HF exchange: compute via Green's function (differential-equation formulation).
+2. Data loading and batch generation: support fractional inputs and more optional parameters.
+3. API change (AtomicDFTSolver): rename `number_of_finite_elements` to `finite_element_number`.
+4. API change (DataManager.load_data): use `configuration_index_list` instead of `atomic_number_list`; atomic numbers read from meta.json.
+5. SCF: max SCF iterations configurable from outside (`max_scf_iterations` and `max_scf_iterations_outer`).
+6. Linear mixing supports preconditioner.
+7. Numerics and mesh: quadrature-point check (>= 2*polynomial_order+3).
+8. Add support for common oxidation states in atom/utils/periodic.py.
+9. Documentation: README prototype; add preliminary logo.
+
+
+----------------
+Feb 6, 2026
+Name: Qihao Cheng
+Changes: (docs/*, atom/xc/oep.py, atom/xc/rpa.py, atom/mesh/builder.py, atom/scf/driver.py)
+1. Add fractional occupation support for RPA.
+2. Apply -1/r boundary condition for RPA/EXX at r >= 9 Bohr.
+3. Remove 2.5 factor from RPA frequency grid weights.
+4. Add docs/ folder with tutorial website framework.
+
+
+----------------
+Feb 4, 2026
+Name: Qihao Cheng
+Changes: (xc/hf.py, scf/*, solver.py, pseudo/psps/*, tests/*, pyproject.toml)
+1. Critical fix: Correct HF exchange occupation handling in xc/hf.py (use half occupations instead of degeneracy factor).
+2. Add `response.py` module for linear response function and preconditioner computation.
+3. Extend Pulay mixing to support general preconditioners with dielectric matrix option.
+4. Refactor `get_derivative_matrix` to use exact analytical expressions.
+5. Add default pseudopotential files to repository.
+6. Move code into atom/ directory and add `pyproject.toml` for standard Python project structure.
+7. Fix generalized eigenvalue solver by switching to `gv` driver.
+8. Improve density initialization using Thomas-Fermi approximations for charged systems.
+9. API change: Rename parameter `domain_radius` to `domain_size` throughout codebase.
+10. Add Uranium (Z=92) LDA test case with reference validation against featom paper.
+
+----------------
+Jan 28, 2026
+Name: Qihao Cheng
+Changes: (solver.py, xc/*, data/*, scf/*, pseudo/local.py, utils/occupation_states.py)
+1. Support fractional `atomic_number` and `n_electrons` input.
+2. Support ML XC corrections into SCF iteration (potential type).
+3. Add fast dataset generation and related utilities.
+4. Add interfaces for ML training, validation, and visualization.
+5. API change: Rename `print_debug` to `verbose`.
+
+----------------
+Jan 19, 2026
+Name: Qihao Cheng
+Changes: (xc/hf.py, data/*, xc/ml_xc/*)
+1. Rename xc/hybrid.py to xc/hf.py
+2. Rename post folder to data
+3. Move delta folder into xc and rename to ml_xc
+4. Add more functionality into data folder and update delta/atom/xc/ml_xc/README.md
+
+----------------
+Jan 14, 2026
+Name: Qihao Cheng
+Changes: (solver.py)
+1. Print last modified date of the code to output file.
+2. Create ChangeLog

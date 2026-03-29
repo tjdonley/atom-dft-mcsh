@@ -1,0 +1,11 @@
+# Requirements for Binder (used by Thebe for interactive code execution)
+# This file is used when users click "Run" on code cells in the HTML documentation
+
+numpy>=1.20.0
+scipy>=1.7.0
+matplotlib>=3.3.0
+jupyter
+ipykernel
+
+# Install atom package from the repository
+-e git+https://github.com/phanish-suryanarayana/atom.git@main#egg=atom
