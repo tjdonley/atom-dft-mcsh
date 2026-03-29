@@ -60,6 +60,8 @@ class MCSHConfig:
         object.__setattr__(self, "rcuts", tuple(self.rcuts))
         if not self.rcuts:
             raise ValueError("rcuts must be a non-empty sequence")
+        if any(r <= 0 for r in self.rcuts):
+            raise ValueError("All rcut values must be strictly positive")
         if self.l_max < 0:
             raise ValueError(f"l_max must be non-negative, got {self.l_max}")
         if self.box_size <= 0:
