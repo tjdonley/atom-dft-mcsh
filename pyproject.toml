@@ -89,10 +89,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/phanish-suryanarayana/atom"
-Documentation = "https://github.com/phanish-suryanarayana/atom#readme"
-Repository = "https://github.com/phanish-suryanarayana/atom"
-Issues = "https://github.com/phanish-suryanarayana/atom/issues"
+Homepage = "https://github.com/tjdonley/atom-dft-mcsh"
+Documentation = "https://github.com/tjdonley/atom-dft-mcsh#readme"
+Repository = "https://github.com/tjdonley/atom-dft-mcsh"
+Issues = "https://github.com/tjdonley/atom-dft-mcsh/issues"
 
 [tool.setuptools]
 packages = ["atom", "atom.descriptors"]

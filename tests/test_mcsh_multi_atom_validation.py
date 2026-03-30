@@ -162,16 +162,25 @@ class TestChargeSumRule:
     def test_l0_approaches_Ne_heaviside(self, all_atom_results, atom):
         profile = all_atom_results[atom]["h_profile"]
         ci = _center_idx(profile)
-        # l=0 at the largest Rcut (4.0 Bohr)
-        l0_large_rcut = profile["descriptors"][ci, -1, 0]
         Ne = ATOMS[atom]["Ne"]
-        # The descriptor is the integral of rho*dV in the sphere
-        # It equals N_e * (fraction of charge within Rcut)
-        # At Rcut=4.0, compact atoms (He, Be) capture >90% of charge
-        # Diffuse atoms (Li 2s, N 2p) capture less -- use 60% threshold
-        assert abs(l0_large_rcut) > 0.60 * Ne, (
-            f"{atom}: l=0 at Rcut=4.0 = {l0_large_rcut:.4f}, "
-            f"expected > {0.60 * Ne:.2f} (60% of Ne={Ne})"
+        l0_vals = np.abs(profile["descriptors"][ci, :, 0])
+
+        # 1. Monotonicity: l=0 must increase with Rcut (more charge enclosed)
+        for i in range(len(l0_vals) - 1):
+            assert l0_vals[i + 1] >= l0_vals[i] - 1e-10, (
+                f"{atom}: l=0 not monotone: "
+                f"Rcut={RCUTS[i]}->{RCUTS[i+1]}: {l0_vals[i]:.6f}->{l0_vals[i+1]:.6f}"
+            )
+
+        # 2. At largest Rcut (4.0 Bohr), must capture >80% of electrons
+        assert l0_vals[-1] > 0.80 * Ne, (
+            f"{atom}: l=0 at Rcut={RCUTS[-1]} = {l0_vals[-1]:.4f}, "
+            f"expected > {0.80 * Ne:.2f} (80% of Ne={Ne})"
+        )
+
+        # 3. Must show growth from smallest to largest Rcut
+        assert l0_vals[-1] > l0_vals[0] + 1e-6, (
+            f"{atom}: no growth in l=0 from Rcut={RCUTS[0]} to {RCUTS[-1]}"
         )
 
     @pytest.mark.parametrize("atom", list(ATOMS.keys()))

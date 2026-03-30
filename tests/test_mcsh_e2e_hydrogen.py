@@ -1,33 +1,16 @@
 """End-to-end test: hydrogen atom SCF + MCSH descriptor computation.
 
 Runs the full atom-solver for hydrogen at publication quality, computes
-MCSH descriptors, and validates against reference data from pipeline_B.
+MCSH descriptors, and validates physical invariants.
 
-These tests are slow (~60-120 seconds) and require the atom-solver
-density to match pipeline_B reference data.
+These tests are slow (~60-120 seconds).
 """
-
-import json
-import os
 
 import numpy as np
 import pytest
 
 from atom import AtomicDFTSolver
 from atom.descriptors import MCSHCalculator, MCSHConfig
-
-# Path to pipeline_B reference data
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-PIPELINE_B_SUMMARY = os.path.join(PROJECT_ROOT, "pipeline_B_results", "summary.json")
-RHO_RADIAL_CSV = os.path.join(PROJECT_ROOT, "hydrogen_3d_output", "rho_radial.csv")
-
-# Skip all tests if reference data is missing
-pytestmark = pytest.mark.skipif(
-    not os.path.exists(PIPELINE_B_SUMMARY),
-    reason="pipeline_B_results/summary.json not found",
-)
 
 
 @pytest.fixture(scope="module")
@@ -115,10 +98,6 @@ class TestHydrogenMCSHDescriptors:
         l1 = profile["descriptors"][center_idx, :, 1]
         assert np.all(np.abs(l1) < 1e-6), f"l=1 at center = {l1}"
 
-
-class TestHydrogenVsPipelineB:
-    """Compare solver descriptors against pipeline_B reference data."""
-
     def test_descriptors_match_standalone_on_same_density(
         self, hydrogen_full_result
     ):
@@ -140,38 +119,3 @@ class TestHydrogenVsPipelineB:
         inline = hydrogen_full_result["mcsh_result"]
 
         np.testing.assert_array_equal(inline.descriptors, post_hoc.descriptors)
-
-    @pytest.mark.skipif(
-        not os.path.exists(RHO_RADIAL_CSV),
-        reason="hydrogen_3d_output/rho_radial.csv not found",
-    )
-    def test_solver_density_matches_saved_radial(self, hydrogen_full_result):
-        """Solver density should approximately match the saved rho_radial.csv
-        (both are GGA_PBE for hydrogen, same code).
-
-        Tolerance is loose because solver parameters may differ slightly.
-        """
-        saved = np.loadtxt(RHO_RADIAL_CSV, delimiter=",", skiprows=1)
-        r_saved, rho_saved = saved[:, 0], saved[:, 1]
-
-        r_solver = hydrogen_full_result["quadrature_nodes"]
-        rho_solver = hydrogen_full_result["rho"]
-
-        # Interpolate solver density onto saved grid for comparison
-        from scipy.interpolate import interp1d
-        rho_interp = interp1d(
-            r_solver, rho_solver, kind="linear", fill_value=0.0,
-            bounds_error=False,
-        )(r_saved)
-
-        # Compare in the region where both are significant (r < 5 Bohr)
-        mask = (r_saved > 0.1) & (r_saved < 5.0)
-        if np.sum(mask) > 10:
-            rel_diff = np.abs(rho_interp[mask] - rho_saved[mask]) / (
-                rho_saved[mask] + 1e-20
-            )
-            median_rel_diff = np.median(rel_diff)
-            assert median_rel_diff < 0.05, (
-                f"Median relative density difference = {median_rel_diff:.3f}, "
-                f"expected < 5% for same functional"
-            )
