@@ -7,7 +7,7 @@
 # ATOM — Atomic DFT with finite elements
 
 ![CI](https://img.shields.io/badge/CI-private%20repo-lightgrey) [![PyPI](https://img.shields.io/badge/PyPI-not%20published-lightgrey)](https://pypi.org/project/atom-dft/)
-<!-- After making the repo public, use the dynamic badge: [![CI](https://github.com/phanish-suryanarayana/atom/actions/workflows/ci.yaml/badge.svg)](https://github.com/phanish-suryanarayana/atom/actions/workflows/ci.yaml) -->
+<!-- After making the repo public, use the dynamic badge: [![CI](https://github.com/tjdonley/atom-dft-mcsh/actions/workflows/ci.yaml/badge.svg)](https://github.com/tjdonley/atom-dft-mcsh/actions/workflows/ci.yaml) -->
 
 [**Features**](#features)
 | [**Quick start**](#quick-start)
@@ -24,7 +24,7 @@ ATOM solves the Kohn–Sham equations self-consistently and supports a wide rang
 
 Advanced capabilities include the optimized effective potential (OEP) method, hybrid functionals with exact exchange (e.g. HF), RPA with parallelization, configurable parameters and advanced options, and more.
 
-This is a research code. Please try it out, [report issues](https://github.com/phanish-suryanarayana/atom/issues), and share feedback.
+This is a research code. Please try it out, [report issues](https://github.com/tjdonley/atom-dft-mcsh/issues), and share feedback.
 
 ```python
 from atom import AtomicDFTSolver
@@ -94,7 +94,7 @@ results = solver.solve()
 
 | Use case        | Command |
 |-----------------|---------|
-| Core (CPU)      | `pip install -e .` or `pip install atom` |
+| Core (CPU)      | `pip install -e .` |
 | With ML-XC      | `pip install -e ".[ml]"` |
 | With viz        | `pip install -e ".[viz]"` |
 | Dev + tests     | `pip install -e ".[dev]"` |
@@ -103,7 +103,6 @@ results = solver.solve()
 From the repository root:
 
 ```bash
-cd delta/atom
 pip install -e .
 ```
 
@@ -141,7 +140,7 @@ If you use this code in your research, please cite the repository:
 @software{atom2026,
   author = {Qihao Cheng and Shubhang Trivedi and Phanish Suryanarayana},
   title = {{ATOM}: Atomic density functional theory with finite elements},
-  url = {https://github.com/phanish-suryanarayana/atom},
+  url = {https://github.com/tjdonley/atom-dft-mcsh},
   version = {0.1.0},
   year = {2026},
 }
@@ -152,4 +151,4 @@ If you use this code in your research, please cite the repository:
 
 For API details and tutorials, see the [documentation](docs/) in this repository.
 
-For development and contribution guidelines, see the [repository](https://github.com/phanish-suryanarayana/atom).
+For development and contribution guidelines, see the [repository](https://github.com/tjdonley/atom-dft-mcsh).
