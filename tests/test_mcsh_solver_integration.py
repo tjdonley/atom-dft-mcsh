@@ -12,7 +12,7 @@ import pytest
 
 from atom import AtomicDFTSolver
 from atom.descriptors import MCSHCalculator, MCSHConfig
-from standalone_rho_multipole import compute_descriptors_from_radial, MCSHResult
+from atom.descriptors.multipole import compute_descriptors_from_radial, MCSHResult
 
 
 # Solver configuration: fast but converged enough for descriptor comparison

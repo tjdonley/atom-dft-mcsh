@@ -1,7 +1,8 @@
 """MCSH descriptor computation for the atom-DFT solver.
 
-Bridges the 1D radial atom-solver density with the 3D MCSH descriptor
-computation provided by the standalone_rho_multipole package.
+Computes Maxwell Cartesian Spherical Harmonic (MCSH) descriptors from
+the 1D radial density produced by the atom solver. Supports both
+Heaviside and Legendre polynomial radial kernels.
 
 Usage
 -----
@@ -19,7 +20,7 @@ from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
-from standalone_rho_multipole.multipole import (
+from .multipole import (
     MCSHResult,
     compute_descriptors_from_radial,
 )
@@ -84,7 +85,7 @@ class MCSHCalculator:
     """Compute MCSH descriptors from radial density.
 
     Bridges the atom-solver's 1D radial density with the
-    standalone_rho_multipole package's 3D MCSH computation.
+    3D MCSH descriptor computation in atom.descriptors.multipole.
     """
 
     def __init__(self, config: MCSHConfig):

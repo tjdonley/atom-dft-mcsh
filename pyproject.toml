@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "scipy>=1.7.0",
-    "standalone-rho-multipole>=0.1.1",
 ]
 
 [project.optional-dependencies]
@@ -95,7 +94,8 @@ Repository = "https://github.com/tjdonley/atom-dft-mcsh"
 Issues = "https://github.com/tjdonley/atom-dft-mcsh/issues"
 
 [tool.setuptools]
-packages = ["atom", "atom.descriptors"]
+[tool.setuptools.packages.find]
+include = ["atom*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
