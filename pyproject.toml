@@ -27,7 +27,7 @@ classifiers = [
 
 # Core dependencies - required for basic functionality
 dependencies = [
-    "numpy>=2.0.0",
+    "numpy>=1.20.0",
     "scipy>=1.7.0",
 ]
 
@@ -94,7 +94,8 @@ Repository = "https://github.com/tjdonley/atom-dft-mcsh"
 Issues = "https://github.com/tjdonley/atom-dft-mcsh/issues"
 
 [tool.setuptools]
-packages = ["atom", "atom.descriptors"]
+[tool.setuptools.packages.find]
+include = ["atom*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
