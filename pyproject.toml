@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "scipy>=1.7.0",
-    "standalone-rho-multipole>=0.1.1",
 ]
 
 [project.optional-dependencies]

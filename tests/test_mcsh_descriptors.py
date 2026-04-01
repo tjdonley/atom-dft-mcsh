@@ -1,7 +1,7 @@
 """Unit tests for atom.descriptors.mcsh module.
 
 Tests the MCSHConfig dataclass validation and MCSHCalculator
-computation against the standalone_rho_multipole package.
+computation against the underlying multipole module.
 """
 
 import numpy as np
@@ -73,7 +73,7 @@ class TestMCSHCalculator:
 
     def test_compute_from_radial_returns_mcsh_result(self, hydrogen_radial):
         from atom.descriptors import MCSHCalculator, MCSHConfig
-        from standalone_rho_multipole import MCSHResult
+        from atom.descriptors.multipole import MCSHResult
 
         r, rho = hydrogen_radial
         config = MCSHConfig(rcuts=[1.0, 2.0], l_max=2, box_size=10.0, spacing=0.5)
@@ -90,7 +90,7 @@ class TestMCSHCalculator:
         """MCSHCalculator must produce identical results to calling
         compute_descriptors_from_radial directly."""
         from atom.descriptors import MCSHCalculator, MCSHConfig
-        from standalone_rho_multipole import compute_descriptors_from_radial
+        from atom.descriptors.multipole import compute_descriptors_from_radial
 
         r, rho = hydrogen_radial
         rcuts = [1.0, 2.0, 3.0]

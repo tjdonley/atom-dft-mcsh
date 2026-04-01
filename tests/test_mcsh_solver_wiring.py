@@ -33,7 +33,7 @@ class TestSolverMCSHWiring:
 
     def test_mcsh_config_returns_result(self):
         """With mcsh_config, result dict should contain an MCSHResult."""
-        from standalone_rho_multipole import MCSHResult
+        from atom.descriptors.multipole import MCSHResult
 
         config = MCSHConfig(
             rcuts=[1.0, 2.0],
