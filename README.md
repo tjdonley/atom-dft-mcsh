@@ -10,6 +10,7 @@
 <!-- After making the repo public, use the dynamic badge: [![CI](https://github.com/tjdonley/atom-dft-mcsh/actions/workflows/ci.yaml/badge.svg)](https://github.com/tjdonley/atom-dft-mcsh/actions/workflows/ci.yaml) -->
 
 [**Features**](#features)
+| [**MCSH descriptors**](#mcsh-descriptors)
 | [**Quick start**](#quick-start)
 | [**Installation**](#installation)
 | [**Change log**](ChangeLog)
@@ -43,6 +44,7 @@ print(results["energy"])
   - [What is ATOM?](#what-is-atom)
     - [Contents](#contents)
   - [Features](#features)
+  - [MCSH descriptors](#mcsh-descriptors)
   - [Quick start](#quick-start)
   - [Installation](#installation)
     - [Requirements](#requirements)
@@ -60,6 +62,7 @@ print(results["energy"])
 * **SCF driver** — Density, Hamiltonian, eigensolver, Poisson, mixing, and convergence in `atom.scf`.
 * **Exchange–correlation** — LDA, GGA-PBE, hybrid (HF), and ML-XC in `atom.xc`.
 * **Data and ML** — Dataset generation, loading, and ML-XC training interfaces in `atom.data` and `atom.xc.ml_xc`.
+* **MCSH descriptors** — Maxwell Cartesian Spherical Harmonic multipole descriptors with Heaviside and Legendre polynomial radial kernels in `atom.descriptors`.
 
 
 ## Quick start
@@ -80,6 +83,78 @@ solver = AtomicDFTSolver(
 )
 results = solver.solve()
 ```
+
+
+## MCSH descriptors
+
+ATOM can compute MCSH (Maxwell Cartesian Spherical Harmonic) multipole descriptors from the self-consistent electron density. These descriptors characterize the local density environment around the atom and are used as input features for machine-learning exchange-correlation functionals.
+
+### Basic usage
+
+Pass an `MCSHConfig` to the solver to compute descriptors inline with the SCF calculation:
+
+```python
+from atom import AtomicDFTSolver
+from atom.descriptors import MCSHCalculator, MCSHConfig
+
+# Configure descriptors: cutoff radii, angular orders, 3D grid
+config = MCSHConfig(
+    rcuts=[0.5, 1.0, 1.5, 2.0, 3.0, 4.0],  # cutoff radii in Bohr
+    l_max=2,                                   # up to quadrupole (l=0,1,2)
+    box_size=16.0,                             # cubic box side in Bohr
+    spacing=0.4,                               # grid spacing in Bohr
+)
+
+solver = AtomicDFTSolver(
+    atomic_number=6,
+    xc_functional="GGA_PBE",
+    mcsh_config=config,
+)
+results = solver.solve()
+
+# Descriptors are in the result dict
+mcsh = results["mcsh_result"]
+print(mcsh.descriptors.shape)  # (n_eval_points, n_rcuts, n_l)
+```
+
+### Post-hoc computation
+
+You can also compute descriptors after the fact from a saved density:
+
+```python
+from atom.descriptors import MCSHCalculator, MCSHConfig
+
+config = MCSHConfig(rcuts=[1.0, 2.0, 3.0], l_max=2)
+calc = MCSHCalculator(config)
+
+# From solver results
+mcsh = calc.compute_from_solver_result(results)
+
+# Or from raw radial arrays
+mcsh = calc.compute_from_radial(r_quadrature, rho)
+
+# Extract radial profile (distance from atom center)
+profile = calc.extract_radial_profile(mcsh)
+```
+
+### Legendre polynomial kernels
+
+By default, descriptors use the Heaviside (step function) radial kernel. You can also use Legendre polynomial kernels, which weight the density differently within the cutoff sphere:
+
+```python
+config_lp2 = MCSHConfig(
+    rcuts=[1.0, 2.0, 3.0, 4.0],
+    l_max=2,
+    radial_type="legendre",  # "heaviside" (default) or "legendre"
+    radial_order=2,          # Legendre polynomial order
+)
+```
+
+Legendre kernels provide additional information about the radial distribution of charge within the cutoff sphere. Order 0 is identical to Heaviside.
+
+### Validation
+
+End-to-end validation results for H, He, Li, Be, C, N, O are in [`docs/validation/`](docs/validation/), including a PDF report and figures demonstrating charge sum rule convergence, dipole vanishing, and kernel comparisons.
 
 
 ## Installation
@@ -116,6 +191,7 @@ pip install -e .
 | `atom/scf`         | SCF loop: density, Hamiltonian, eigensolver, Poisson, mixer |
 | `atom/xc`          | XC functionals: LDA, GGA, HF, ML-XC, etc. |
 | `atom/data`        | Data generation, loading, and processing |
+| `atom/descriptors`  | MCSH multipole descriptors (Heaviside and Legendre kernels) |
 | `atom/utils`       | Occupation states, periodicity helpers |
 | `tests`            | Unit and integration tests |
 | `docs`             | Tutorial and documentation source |
