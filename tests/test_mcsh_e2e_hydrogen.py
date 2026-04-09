@@ -26,12 +26,13 @@ def hydrogen_full_result():
         box_size=20.0,
         spacing=0.3,
     )
+    calc = MCSHCalculator(config)
     solver = AtomicDFTSolver(
         atomic_number=1,
         xc_functional="GGA_PBE",
         domain_size=20.0,
         verbose=False,
-        mcsh_config=config,
+        mcsh_calculator=calc,
     )
     return solver.solve()
 
