@@ -531,7 +531,7 @@ class AtomicDFTSolver:
         ml_xc_calculator                  : Optional[MLXCCalculator] = None,   # None by default
         ml_each_scf_step                  : Optional[bool]           = None,   # False by default
 
-        mcsh_config                       : Optional[object]         = None,   # MCSHConfig or None
+        mcsh_calculator                   : Optional[object]         = None,   # MCSHCalculator or None
 
         # deprecated parameters
         print_debug                       : Optional[bool]           = None,   # Now changed to verbose
@@ -692,7 +692,7 @@ class AtomicDFTSolver:
         self.verbose                           = verbose
         self.ml_xc_calculator                  = ml_xc_calculator
         self.ml_each_scf_step                  = ml_each_scf_step
-        self.mcsh_config                       = mcsh_config
+        self.mcsh_calculator                   = mcsh_calculator
 
         # set the default parameters, if not provided
         self.set_and_check_initial_parameters()
@@ -939,6 +939,15 @@ class AtomicDFTSolver:
             XC_FUNCTIONAL_NOT_STRING_ERROR.format(type(self.xc_functional))
         assert self.xc_functional in VALID_XC_FUNCTIONAL_LIST, \
             XC_FUNCTIONAL_NOT_IN_VALID_LIST_ERROR.format(VALID_XC_FUNCTIONAL_LIST, self.xc_functional)
+
+        # MCSH calculator validation
+        if self.mcsh_calculator is not None:
+            from .descriptors import MCSHCalculator
+            if not isinstance(self.mcsh_calculator, MCSHCalculator):
+                raise TypeError(
+                    f"mcsh_calculator must be an MCSHCalculator instance, "
+                    f"got {type(self.mcsh_calculator)} instead."
+                )
 
 
         # use OEP flag
@@ -2139,10 +2148,8 @@ class AtomicDFTSolver:
             e_x_local_on_uniform_grid, e_c_local_on_uniform_grid = None, None
 
         # Phase 6b: Compute MCSH descriptors (if requested)
-        if self.mcsh_config is not None:
-            from .descriptors import MCSHCalculator
-            mcsh_calculator = MCSHCalculator(self.mcsh_config)
-            mcsh_result = mcsh_calculator.compute_from_radial(
+        if self.mcsh_calculator is not None:
+            mcsh_result = self.mcsh_calculator.compute_from_radial(
                 r_quad=self.grid_data_standard.quadrature_nodes,
                 rho=scf_result.density_data.rho,
             )
