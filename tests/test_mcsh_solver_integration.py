@@ -45,7 +45,8 @@ def solver_result_no_mcsh():
 def solver_result_with_mcsh():
     """Run solver once with MCSH enabled."""
     config = MCSHConfig(**MCSH_KWARGS)
-    solver = AtomicDFTSolver(**SOLVER_KWARGS, mcsh_config=config)
+    calc = MCSHCalculator(config)
+    solver = AtomicDFTSolver(**SOLVER_KWARGS, mcsh_calculator=calc)
     return solver.solve()
 
 
