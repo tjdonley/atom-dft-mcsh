@@ -189,3 +189,56 @@ class TestMCSHCalculator:
         assert "l_max" in profile
         assert len(profile["r"]) == result.descriptors.shape[0]
         assert np.all(profile["r"] >= 0)  # distances are non-negative
+
+    def test_compute_from_3d_returns_mcsh_result(self):
+        """compute_from_3d accepts a 3D density grid directly."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+        from atom.descriptors.multipole import MCSHResult
+
+        # Build a small uniform density cube
+        nx = ny = nz = 21
+        h = 0.5
+        rho_3d = np.ones((nx, ny, nz)) * 0.1
+
+        config = MCSHConfig(rcuts=[1.0, 2.0], l_max=2, box_size=10.0, spacing=h)
+        calc = MCSHCalculator(config)
+        result = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
+
+        assert isinstance(result, MCSHResult)
+        assert result.descriptors.ndim == 3
+        assert result.descriptors.shape[1] == 2   # 2 rcuts
+        assert result.descriptors.shape[2] == 3   # l_max=2 -> 3 channels
+
+    def test_compute_from_3d_matches_standalone(self, hydrogen_radial):
+        """compute_from_3d must produce identical results to calling
+        compute_descriptors directly."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+        from atom.descriptors.multipole import compute_descriptors
+        from atom.descriptors.grid3d import (
+            make_cartesian_grid,
+            grid_radial_distances,
+            project_radial_to_3d,
+        )
+
+        r, rho = hydrogen_radial
+        box_size = 10.0
+        spacing = 0.5
+        center = (box_size / 2,) * 3
+
+        # Build 3D density manually
+        x_1d, X, Y, Z = make_cartesian_grid(box_size, spacing)
+        R_3d = grid_radial_distances(X, Y, Z, center)
+        rho_3d = project_radial_to_3d(r, rho, R_3d)
+        h = float(x_1d[1] - x_1d[0])
+
+        # Direct call
+        direct = compute_descriptors(
+            rho_3d, (h, h, h), rcuts=[1.0, 2.0], l_max=2, periodic=True,
+        )
+
+        # Via MCSHCalculator
+        config = MCSHConfig(rcuts=[1.0, 2.0], box_size=box_size, spacing=spacing)
+        calc = MCSHCalculator(config)
+        via_calc = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
+
+        np.testing.assert_array_equal(direct.descriptors, via_calc.descriptors)

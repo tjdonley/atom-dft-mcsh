@@ -22,6 +22,7 @@ import numpy as np
 
 from .multipole import (
     MCSHResult,
+    compute_descriptors,
     compute_descriptors_from_radial,
 )
 
@@ -148,6 +149,40 @@ class MCSHCalculator:
             r_quad=result["quadrature_nodes"],
             rho=result["rho"],
             eval_indices=eval_indices,
+        )
+
+    def compute_from_3d(
+        self,
+        rho_3d: np.ndarray,
+        spacing: Tuple[float, float, float],
+        eval_indices: Optional[np.ndarray] = None,
+    ) -> MCSHResult:
+        """Compute MCSH descriptors from a pre-built 3D density grid.
+
+        Parameters
+        ----------
+        rho_3d : (nx, ny, nz) array
+            3D electron density (1/Bohr^3).
+        spacing : (hx, hy, hz) tuple
+            Grid spacing in Bohr.
+        eval_indices : (M, 3) int array, optional
+            Grid indices to evaluate at. If None, evaluates along
+            the x-axis through the grid center.
+
+        Returns
+        -------
+        MCSHResult
+        """
+        c = self.config
+        return compute_descriptors(
+            rho_3d=rho_3d,
+            spacing=spacing,
+            rcuts=c.rcuts,
+            l_max=c.l_max,
+            eval_indices=eval_indices,
+            periodic=c.periodic,
+            radial_type=c.radial_type,
+            radial_order=c.radial_order,
         )
 
     def extract_radial_profile(self, mcsh_result: MCSHResult) -> Dict:
