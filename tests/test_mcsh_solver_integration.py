@@ -104,7 +104,7 @@ class TestSolverVsStandalone:
     def test_inline_mcsh_matches_post_hoc(
         self, solver_result_no_mcsh, solver_result_with_mcsh,
     ):
-        """Descriptors from solver's built-in mcsh_config must match
+        """Descriptors from solver's built-in mcsh_calculator must match
         computing them post-hoc from the same density."""
         config = MCSHConfig(**MCSH_KWARGS)
         calc = MCSHCalculator(config)
