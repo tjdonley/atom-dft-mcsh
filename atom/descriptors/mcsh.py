@@ -185,8 +185,23 @@ class MCSHCalculator:
             radial_order=c.radial_order,
         )
 
-    def extract_radial_profile(self, mcsh_result: MCSHResult) -> Dict:
+    def extract_radial_profile(
+        self,
+        mcsh_result: MCSHResult,
+        center: Optional[Tuple[float, float, float]] = None,
+    ) -> Dict:
         """Map 3D evaluation points back to radial distances from atom center.
+
+        Parameters
+        ----------
+        mcsh_result : MCSHResult
+            Result from any ``compute_from_*`` method.
+        center : (cx, cy, cz) tuple, optional
+            Atom center in Bohr. Defaults to ``(box_size/2, box_size/2,
+            box_size/2)`` from config, which is correct for results from
+            ``compute_from_radial``/``compute_from_solver_result``.
+            For ``compute_from_3d`` results, pass the actual atom center
+            in the external grid's coordinate system.
 
         Returns
         -------
@@ -194,8 +209,14 @@ class MCSHCalculator:
             Keys: ``'r'`` (radial distances), ``'descriptors'`` (values),
             ``'rcuts'``, ``'l_max'``.
         """
-        center = np.array([self.config.box_size / 2] * 3)
-        r = np.linalg.norm(mcsh_result.grid_positions - center, axis=1)
+        if center is None:
+            center = (
+                self.config.box_size / 2,
+                self.config.box_size / 2,
+                self.config.box_size / 2,
+            )
+        center_arr = np.array(center)
+        r = np.linalg.norm(mcsh_result.grid_positions - center_arr, axis=1)
         return {
             "r": r,
             "descriptors": mcsh_result.descriptors,

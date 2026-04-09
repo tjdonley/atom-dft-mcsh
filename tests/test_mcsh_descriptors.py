@@ -190,6 +190,24 @@ class TestMCSHCalculator:
         assert len(profile["r"]) == result.descriptors.shape[0]
         assert np.all(profile["r"] >= 0)  # distances are non-negative
 
+    def test_extract_radial_profile_custom_center(self, hydrogen_radial):
+        """extract_radial_profile accepts an explicit center for 3D grids."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+
+        r, rho = hydrogen_radial
+        config = MCSHConfig(rcuts=[2.0], box_size=10.0, spacing=0.5)
+        calc = MCSHCalculator(config)
+        result = calc.compute_from_radial(r, rho)
+
+        # Default center = box_size/2 = 5.0
+        profile_default = calc.extract_radial_profile(result)
+        profile_explicit = calc.extract_radial_profile(result, center=(5.0, 5.0, 5.0))
+        np.testing.assert_array_equal(profile_default["r"], profile_explicit["r"])
+
+        # Different center gives different radial distances
+        profile_shifted = calc.extract_radial_profile(result, center=(3.0, 3.0, 3.0))
+        assert not np.array_equal(profile_default["r"], profile_shifted["r"])
+
     def test_compute_from_3d_returns_mcsh_result(self):
         """compute_from_3d accepts a 3D density grid directly."""
         from atom.descriptors import MCSHCalculator, MCSHConfig
