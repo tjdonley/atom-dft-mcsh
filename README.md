@@ -91,7 +91,7 @@ ATOM can compute MCSH (Maxwell Cartesian Spherical Harmonic) multipole descripto
 
 ### Basic usage
 
-Pass an `MCSHConfig` to the solver to compute descriptors inline with the SCF calculation:
+Pass descriptor calculators to the solver to compute descriptors inline with the SCF calculation:
 
 ```python
 from atom import AtomicDFTSolver
@@ -104,16 +104,17 @@ config = MCSHConfig(
     box_size=16.0,                             # cubic box side in Bohr
     spacing=0.4,                               # grid spacing in Bohr
 )
+mcsh_calc = MCSHCalculator(config)
 
 solver = AtomicDFTSolver(
     atomic_number=6,
     xc_functional="GGA_PBE",
-    mcsh_config=config,
+    descriptor_calculators=[mcsh_calc],
 )
 results = solver.solve()
 
 # Descriptors are in the result dict
-mcsh = results["mcsh_result"]
+mcsh = results["descriptor_results"]["mcsh"]
 print(mcsh.descriptors.shape)  # (n_eval_points, n_rcuts, n_l)
 ```
 
@@ -132,6 +133,9 @@ mcsh = calc.compute_from_solver_result(results)
 
 # Or from raw radial arrays
 mcsh = calc.compute_from_radial(r_quadrature, rho)
+
+# Or from a pre-built 3D density grid
+mcsh = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
 
 # Extract radial profile (distance from atom center)
 profile = calc.extract_radial_profile(mcsh)

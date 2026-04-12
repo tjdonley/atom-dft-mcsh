@@ -20,8 +20,10 @@ from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
+from .base import DescriptorCalculator, DescriptorContext
 from .multipole import (
     MCSHResult,
+    compute_descriptors,
     compute_descriptors_from_radial,
 )
 
@@ -81,15 +83,24 @@ class MCSHConfig:
             )
 
 
-class MCSHCalculator:
+class MCSHCalculator(DescriptorCalculator):
     """Compute MCSH descriptors from radial density.
 
     Bridges the atom-solver's 1D radial density with the
     3D MCSH descriptor computation in atom.descriptors.multipole.
     """
 
+    name = "mcsh"
+
     def __init__(self, config: MCSHConfig):
         self.config = config
+
+    def compute(self, context: DescriptorContext) -> MCSHResult:
+        """Compute descriptors from generic solver context."""
+        return self.compute_from_radial(
+            r_quad=context.quadrature_nodes,
+            rho=context.density,
+        )
 
     def compute_from_radial(
         self,
@@ -150,8 +161,51 @@ class MCSHCalculator:
             eval_indices=eval_indices,
         )
 
-    def extract_radial_profile(self, mcsh_result: MCSHResult) -> Dict:
+    def compute_from_3d(
+        self,
+        rho_3d: np.ndarray,
+        spacing: Tuple[float, float, float],
+        eval_indices: Optional[np.ndarray] = None,
+    ) -> MCSHResult:
+        """Compute MCSH descriptors from a pre-built 3D density grid.
+
+        Parameters
+        ----------
+        rho_3d : (nx, ny, nz) array
+            3D electron density (1/Bohr^3).
+        spacing : (hx, hy, hz) tuple
+            Grid spacing in Bohr.
+        eval_indices : (M, 3) int array, optional
+            Grid indices to evaluate at. If None, evaluates along
+            the x-axis through the grid center.
+        """
+        c = self.config
+        return compute_descriptors(
+            rho_3d=rho_3d,
+            spacing=spacing,
+            rcuts=c.rcuts,
+            l_max=c.l_max,
+            eval_indices=eval_indices,
+            periodic=c.periodic,
+            radial_type=c.radial_type,
+            radial_order=c.radial_order,
+        )
+
+    def extract_radial_profile(
+        self,
+        mcsh_result: MCSHResult,
+        center: Optional[Tuple[float, float, float]] = None,
+    ) -> Dict:
         """Map 3D evaluation points back to radial distances from atom center.
+
+        Parameters
+        ----------
+        mcsh_result : MCSHResult
+            Result from any ``compute_from_*`` method.
+        center : (cx, cy, cz) tuple, optional
+            Atom center in Bohr. Defaults to the centered-box convention used
+            by ``compute_from_radial``. Pass an explicit center when mapping
+            results from ``compute_from_3d`` on an externally defined grid.
 
         Returns
         -------
@@ -159,8 +213,10 @@ class MCSHCalculator:
             Keys: ``'r'`` (radial distances), ``'descriptors'`` (values),
             ``'rcuts'``, ``'l_max'``.
         """
-        center = np.array([self.config.box_size / 2] * 3)
-        r = np.linalg.norm(mcsh_result.grid_positions - center, axis=1)
+        if center is None:
+            center = (self.config.box_size / 2,) * 3
+        center_array = np.array(center)
+        r = np.linalg.norm(mcsh_result.grid_positions - center_array, axis=1)
         return {
             "r": r,
             "descriptors": mcsh_result.descriptors,

@@ -16,6 +16,7 @@ class TestMCSHConfig:
 
     def test_valid_config_heaviside(self):
         from atom.descriptors import MCSHConfig
+
         config = MCSHConfig(rcuts=[1.0, 2.0, 3.0])
         assert config.radial_type == "heaviside"
         assert config.l_max == 2
@@ -24,6 +25,7 @@ class TestMCSHConfig:
 
     def test_valid_config_legendre(self):
         from atom.descriptors import MCSHConfig
+
         config = MCSHConfig(
             rcuts=[1.0, 2.0],
             radial_type="legendre",
@@ -34,26 +36,31 @@ class TestMCSHConfig:
 
     def test_empty_rcuts_raises(self):
         from atom.descriptors import MCSHConfig
+
         with pytest.raises(ValueError, match="rcuts"):
             MCSHConfig(rcuts=[])
 
     def test_negative_l_max_raises(self):
         from atom.descriptors import MCSHConfig
+
         with pytest.raises(ValueError, match="l_max"):
             MCSHConfig(rcuts=[1.0], l_max=-1)
 
     def test_invalid_radial_type_raises(self):
         from atom.descriptors import MCSHConfig
+
         with pytest.raises(ValueError, match="radial_type"):
             MCSHConfig(rcuts=[1.0], radial_type="cubic")
 
     def test_rcut_exceeds_half_box_raises(self):
         from atom.descriptors import MCSHConfig
+
         with pytest.raises(ValueError, match="box_size"):
             MCSHConfig(rcuts=[12.0], box_size=20.0)
 
     def test_zero_spacing_raises(self):
         from atom.descriptors import MCSHConfig
+
         with pytest.raises(ValueError, match="spacing"):
             MCSHConfig(rcuts=[1.0], spacing=0.0)
 
@@ -100,22 +107,31 @@ class TestMCSHCalculator:
 
         # Direct call to standalone package
         standalone_result = compute_descriptors_from_radial(
-            r_radial=r, rho_radial=rho,
-            box_size=box_size, spacing=spacing, atom_center=center,
-            rcuts=rcuts, l_max=2, periodic=True,
-            radial_type="heaviside", radial_order=0,
+            r_radial=r,
+            rho_radial=rho,
+            box_size=box_size,
+            spacing=spacing,
+            atom_center=center,
+            rcuts=rcuts,
+            l_max=2,
+            periodic=True,
+            radial_type="heaviside",
+            radial_order=0,
         )
 
         # Via MCSHCalculator
         config = MCSHConfig(
-            rcuts=rcuts, box_size=box_size, spacing=spacing,
+            rcuts=rcuts,
+            box_size=box_size,
+            spacing=spacing,
         )
         calc = MCSHCalculator(config)
         calc_result = calc.compute_from_radial(r, rho)
 
         # Must be bitwise identical (same code path)
         np.testing.assert_array_equal(
-            calc_result.descriptors, standalone_result.descriptors,
+            calc_result.descriptors,
+            standalone_result.descriptors,
         )
 
     def test_legendre_produces_different_values(self, hydrogen_radial):
@@ -126,7 +142,9 @@ class TestMCSHCalculator:
         kwargs = dict(rcuts=[2.0], box_size=10.0, spacing=0.5, l_max=2)
 
         heaviside = MCSHCalculator(MCSHConfig(**kwargs, radial_type="heaviside"))
-        legendre1 = MCSHCalculator(MCSHConfig(**kwargs, radial_type="legendre", radial_order=1))
+        legendre1 = MCSHCalculator(
+            MCSHConfig(**kwargs, radial_type="legendre", radial_order=1)
+        )
 
         h_result = heaviside.compute_from_radial(r, rho)
         l_result = legendre1.compute_from_radial(r, rho)
@@ -142,13 +160,17 @@ class TestMCSHCalculator:
         kwargs = dict(rcuts=[2.0], box_size=10.0, spacing=0.5, l_max=2)
 
         heaviside = MCSHCalculator(MCSHConfig(**kwargs, radial_type="heaviside"))
-        legendre0 = MCSHCalculator(MCSHConfig(**kwargs, radial_type="legendre", radial_order=0))
+        legendre0 = MCSHCalculator(
+            MCSHConfig(**kwargs, radial_type="legendre", radial_order=0)
+        )
 
         h_result = heaviside.compute_from_radial(r, rho)
         l_result = legendre0.compute_from_radial(r, rho)
 
         np.testing.assert_allclose(
-            h_result.descriptors, l_result.descriptors, atol=1e-14,
+            h_result.descriptors,
+            l_result.descriptors,
+            atol=1e-14,
         )
 
     def test_compute_from_solver_result(self, hydrogen_radial):
@@ -170,7 +192,8 @@ class TestMCSHCalculator:
         from_solver = calc.compute_from_solver_result(mock_result)
 
         np.testing.assert_array_equal(
-            from_radial.descriptors, from_solver.descriptors,
+            from_radial.descriptors,
+            from_solver.descriptors,
         )
 
     def test_extract_radial_profile(self, hydrogen_radial):
@@ -189,3 +212,70 @@ class TestMCSHCalculator:
         assert "l_max" in profile
         assert len(profile["r"]) == result.descriptors.shape[0]
         assert np.all(profile["r"] >= 0)  # distances are non-negative
+
+    def test_extract_radial_profile_custom_center(self, hydrogen_radial):
+        """extract_radial_profile accepts an explicit center for 3D grids."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+
+        r, rho = hydrogen_radial
+        config = MCSHConfig(rcuts=[2.0], box_size=10.0, spacing=0.5)
+        calc = MCSHCalculator(config)
+        result = calc.compute_from_radial(r, rho)
+
+        profile_default = calc.extract_radial_profile(result)
+        profile_explicit = calc.extract_radial_profile(result, center=(5.0, 5.0, 5.0))
+        np.testing.assert_array_equal(profile_default["r"], profile_explicit["r"])
+
+        profile_shifted = calc.extract_radial_profile(result, center=(3.0, 3.0, 3.0))
+        assert not np.array_equal(profile_default["r"], profile_shifted["r"])
+
+    def test_compute_from_3d_returns_mcsh_result(self):
+        """compute_from_3d accepts a 3D density grid directly."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+        from atom.descriptors.multipole import MCSHResult
+
+        nx = ny = nz = 21
+        h = 0.5
+        rho_3d = np.ones((nx, ny, nz)) * 0.1
+
+        config = MCSHConfig(rcuts=[1.0, 2.0], l_max=2, box_size=10.0, spacing=h)
+        calc = MCSHCalculator(config)
+        result = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
+
+        assert isinstance(result, MCSHResult)
+        assert result.descriptors.ndim == 3
+        assert result.descriptors.shape[1] == 2
+        assert result.descriptors.shape[2] == 3
+
+    def test_compute_from_3d_matches_standalone(self, hydrogen_radial):
+        """compute_from_3d must match compute_descriptors on the same grid."""
+        from atom.descriptors import MCSHCalculator, MCSHConfig
+        from atom.descriptors.grid3d import (
+            grid_radial_distances,
+            make_cartesian_grid,
+            project_radial_to_3d,
+        )
+        from atom.descriptors.multipole import compute_descriptors
+
+        r, rho = hydrogen_radial
+        box_size = 10.0
+        spacing = 0.5
+        center = (box_size / 2,) * 3
+
+        x_1d, X, Y, Z = make_cartesian_grid(box_size, spacing)
+        R_3d = grid_radial_distances(X, Y, Z, center)
+        rho_3d = project_radial_to_3d(r, rho, R_3d)
+        h = float(x_1d[1] - x_1d[0])
+
+        direct = compute_descriptors(
+            rho_3d=rho_3d,
+            spacing=(h, h, h),
+            rcuts=[1.0, 2.0],
+            l_max=2,
+            periodic=True,
+        )
+
+        config = MCSHConfig(rcuts=[1.0, 2.0], box_size=box_size, spacing=spacing)
+        via_calc = MCSHCalculator(config).compute_from_3d(rho_3d, spacing=(h, h, h))
+
+        np.testing.assert_array_equal(direct.descriptors, via_calc.descriptors)

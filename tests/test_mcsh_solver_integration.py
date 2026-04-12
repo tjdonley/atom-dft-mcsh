@@ -45,16 +45,15 @@ def solver_result_no_mcsh():
 def solver_result_with_mcsh():
     """Run solver once with MCSH enabled."""
     config = MCSHConfig(**MCSH_KWARGS)
-    solver = AtomicDFTSolver(**SOLVER_KWARGS, mcsh_config=config)
+    calc = MCSHCalculator(config)
+    solver = AtomicDFTSolver(**SOLVER_KWARGS, descriptor_calculators=[calc])
     return solver.solve()
 
 
 class TestSolverVsStandalone:
     """Solver descriptors must exactly match standalone package."""
 
-    def test_solver_mcsh_matches_standalone_heaviside(
-        self, solver_result_no_mcsh
-    ):
+    def test_solver_mcsh_matches_standalone_heaviside(self, solver_result_no_mcsh):
         """Compute descriptors from solver density via both paths.
         They call the same underlying function, so must be bitwise equal."""
         r = solver_result_no_mcsh["quadrature_nodes"]
@@ -65,9 +64,13 @@ class TestSolverVsStandalone:
 
         # Path A: standalone package directly
         standalone = compute_descriptors_from_radial(
-            r_radial=r, rho_radial=rho,
-            box_size=config.box_size, spacing=config.spacing,
-            atom_center=center, rcuts=config.rcuts, l_max=config.l_max,
+            r_radial=r,
+            rho_radial=rho,
+            box_size=config.box_size,
+            spacing=config.spacing,
+            atom_center=center,
+            rcuts=config.rcuts,
+            l_max=config.l_max,
         )
 
         # Path B: via MCSHCalculator
@@ -76,23 +79,28 @@ class TestSolverVsStandalone:
 
         np.testing.assert_array_equal(standalone.descriptors, via_calc.descriptors)
 
-    def test_solver_mcsh_matches_standalone_legendre(
-        self, solver_result_no_mcsh
-    ):
+    def test_solver_mcsh_matches_standalone_legendre(self, solver_result_no_mcsh):
         """Same as above but with Legendre order 2."""
         r = solver_result_no_mcsh["quadrature_nodes"]
         rho = solver_result_no_mcsh["rho"]
 
         config = MCSHConfig(
-            **MCSH_KWARGS, radial_type="legendre", radial_order=2,
+            **MCSH_KWARGS,
+            radial_type="legendre",
+            radial_order=2,
         )
         center = (config.box_size / 2,) * 3
 
         standalone = compute_descriptors_from_radial(
-            r_radial=r, rho_radial=rho,
-            box_size=config.box_size, spacing=config.spacing,
-            atom_center=center, rcuts=config.rcuts, l_max=config.l_max,
-            radial_type="legendre", radial_order=2,
+            r_radial=r,
+            rho_radial=rho,
+            box_size=config.box_size,
+            spacing=config.spacing,
+            atom_center=center,
+            rcuts=config.rcuts,
+            l_max=config.l_max,
+            radial_type="legendre",
+            radial_order=2,
         )
 
         calc = MCSHCalculator(config)
@@ -101,15 +109,17 @@ class TestSolverVsStandalone:
         np.testing.assert_array_equal(standalone.descriptors, via_calc.descriptors)
 
     def test_inline_mcsh_matches_post_hoc(
-        self, solver_result_no_mcsh, solver_result_with_mcsh,
+        self,
+        solver_result_no_mcsh,
+        solver_result_with_mcsh,
     ):
-        """Descriptors from solver's built-in mcsh_config must match
+        """Descriptors from solver's descriptor pipeline must match
         computing them post-hoc from the same density."""
         config = MCSHConfig(**MCSH_KWARGS)
         calc = MCSHCalculator(config)
         post_hoc = calc.compute_from_solver_result(solver_result_no_mcsh)
 
-        inline = solver_result_with_mcsh["mcsh_result"]
+        inline = solver_result_with_mcsh["descriptor_results"]["mcsh"]
 
         np.testing.assert_array_equal(inline.descriptors, post_hoc.descriptors)
 
@@ -119,7 +129,7 @@ class TestPhysicalInvariants:
 
     def test_l0_is_nonzero_near_center(self, solver_result_with_mcsh):
         """l=0 (monopole) integrates density in sphere, must be nonzero and finite."""
-        mcsh = solver_result_with_mcsh["mcsh_result"]
+        mcsh = solver_result_with_mcsh["descriptor_results"]["mcsh"]
         profile = MCSHCalculator(MCSHConfig(**MCSH_KWARGS)).extract_radial_profile(mcsh)
         near_center = profile["r"] < 2.0
         if np.any(near_center):
@@ -130,7 +140,7 @@ class TestPhysicalInvariants:
 
     def test_l1_vanishes_at_center(self, solver_result_with_mcsh):
         """For spherical density, l=1 (dipole) should vanish at the atom center."""
-        mcsh = solver_result_with_mcsh["mcsh_result"]
+        mcsh = solver_result_with_mcsh["descriptor_results"]["mcsh"]
         config = MCSHConfig(**MCSH_KWARGS)
         profile = MCSHCalculator(config).extract_radial_profile(mcsh)
 
@@ -145,7 +155,7 @@ class TestPhysicalInvariants:
 
     def test_l0_monotone_with_rcut(self, solver_result_with_mcsh):
         """l=0 magnitude should increase with rcut (more charge enclosed)."""
-        mcsh = solver_result_with_mcsh["mcsh_result"]
+        mcsh = solver_result_with_mcsh["descriptor_results"]["mcsh"]
         config = MCSHConfig(**MCSH_KWARGS)
         profile = MCSHCalculator(config).extract_radial_profile(mcsh)
 
@@ -160,7 +170,7 @@ class TestPhysicalInvariants:
 
     def test_descriptors_are_finite(self, solver_result_with_mcsh):
         """No NaN or Inf in descriptor output."""
-        mcsh = solver_result_with_mcsh["mcsh_result"]
+        mcsh = solver_result_with_mcsh["descriptor_results"]["mcsh"]
         assert np.all(np.isfinite(mcsh.descriptors))
 
     def test_lp0_equals_heaviside_through_solver(self, solver_result_no_mcsh):
@@ -175,5 +185,7 @@ class TestPhysicalInvariants:
         l_result = MCSHCalculator(l_config).compute_from_radial(r, rho)
 
         np.testing.assert_allclose(
-            h_result.descriptors, l_result.descriptors, atol=1e-14,
+            h_result.descriptors,
+            l_result.descriptors,
+            atol=1e-14,
         )

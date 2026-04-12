@@ -26,12 +26,13 @@ def hydrogen_full_result():
         box_size=20.0,
         spacing=0.3,
     )
+    calc = MCSHCalculator(config)
     solver = AtomicDFTSolver(
         atomic_number=1,
         xc_functional="GGA_PBE",
         domain_size=20.0,
         verbose=False,
-        mcsh_config=config,
+        descriptor_calculators=[calc],
     )
     return solver.solve()
 
@@ -61,16 +62,16 @@ class TestHydrogenMCSHDescriptors:
     """Verify MCSH descriptors are physically reasonable."""
 
     def test_mcsh_result_exists(self, hydrogen_full_result):
-        assert hydrogen_full_result["mcsh_result"] is not None
+        assert hydrogen_full_result["descriptor_results"]["mcsh"] is not None
 
     def test_descriptor_shape(self, hydrogen_full_result):
         """6 rcuts, l_max=2 -> 3 channels."""
-        d = hydrogen_full_result["mcsh_result"].descriptors
+        d = hydrogen_full_result["descriptor_results"]["mcsh"].descriptors
         assert d.shape[1] == 6  # rcuts
         assert d.shape[2] == 3  # l=0,1,2
 
     def test_all_finite(self, hydrogen_full_result):
-        d = hydrogen_full_result["mcsh_result"].descriptors
+        d = hydrogen_full_result["descriptor_results"]["mcsh"].descriptors
         assert np.all(np.isfinite(d))
 
     def test_l1_near_zero_at_center(self, hydrogen_full_result):
@@ -98,9 +99,7 @@ class TestHydrogenMCSHDescriptors:
         l1 = profile["descriptors"][center_idx, :, 1]
         assert np.all(np.abs(l1) < 1e-6), f"l=1 at center = {l1}"
 
-    def test_descriptors_match_standalone_on_same_density(
-        self, hydrogen_full_result
-    ):
+    def test_descriptors_match_standalone_on_same_density(self, hydrogen_full_result):
         """Descriptors computed through solver must match standalone package
         when given the same density. This is the critical round-trip test."""
         r = hydrogen_full_result["quadrature_nodes"]
@@ -108,7 +107,9 @@ class TestHydrogenMCSHDescriptors:
 
         config = MCSHConfig(
             rcuts=[0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            l_max=2, box_size=20.0, spacing=0.3,
+            l_max=2,
+            box_size=20.0,
+            spacing=0.3,
         )
         calc = MCSHCalculator(config)
 
@@ -116,6 +117,6 @@ class TestHydrogenMCSHDescriptors:
         post_hoc = calc.compute_from_radial(r, rho)
 
         # Inline computation from solver
-        inline = hydrogen_full_result["mcsh_result"]
+        inline = hydrogen_full_result["descriptor_results"]["mcsh"]
 
         np.testing.assert_array_equal(inline.descriptors, post_hoc.descriptors)
