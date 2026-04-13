@@ -28,7 +28,10 @@ class DescriptorContext:
 class DescriptorCalculator(ABC):
     """Abstract base class for descriptor post-processing calculators."""
 
-    name: str
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Stable result key used under ``descriptor_results``."""
 
     @abstractmethod
     def compute(self, context: DescriptorContext) -> Any:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from atom import AtomicDFTSolver
 from atom.descriptors import (
     DescriptorCalculator,
@@ -20,7 +22,9 @@ class DummyDescriptorResult:
 
 
 class DummyDescriptorCalculator(DescriptorCalculator):
-    name = "dummy"
+    @property
+    def name(self) -> str:
+        return "dummy"
 
     def compute(self, context: DescriptorContext) -> DummyDescriptorResult:
         return DummyDescriptorResult(
@@ -28,6 +32,15 @@ class DummyDescriptorCalculator(DescriptorCalculator):
             density_size=len(context.density),
             density_norm=float(context.density.sum()),
         )
+
+
+class InvalidNamedDescriptorCalculator(DescriptorCalculator):
+    @property
+    def name(self):
+        return 123
+
+    def compute(self, context: DescriptorContext):
+        return None
 
 
 FAST_SOLVER_KWARGS = dict(
@@ -73,3 +86,20 @@ def test_solver_stores_multiple_descriptor_results_by_name():
     assert set(result["descriptor_results"].keys()) == {"dummy", "mp_test"}
     assert result["descriptor_results"]["mp_test"].angular_basis == "mcsh"
     assert result["descriptor_results"]["mp_test"].descriptors.shape[1] == 2
+
+
+def test_missing_name_is_rejected_by_abc():
+    class BrokenDescriptorCalculator(DescriptorCalculator):
+        def compute(self, context: DescriptorContext):
+            return None
+
+    with pytest.raises(TypeError, match="abstract"):
+        BrokenDescriptorCalculator()
+
+
+def test_non_string_name_is_rejected_by_solver():
+    with pytest.raises(TypeError, match="name must be a non-empty string"):
+        AtomicDFTSolver(
+            **FAST_SOLVER_KWARGS,
+            descriptor_calculators=[InvalidNamedDescriptorCalculator()],
+        )

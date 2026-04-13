@@ -65,7 +65,7 @@ class MultipoleCalculator(DescriptorCalculator):
         self.box_size = float(box_size)
         self.periodic = periodic
         self.radial_order = radial_order
-        self.name = name
+        self._name = name
 
         self._validate()
 
@@ -100,6 +100,10 @@ class MultipoleCalculator(DescriptorCalculator):
         build_radial_kernel(
             self.radial_basis, radius=self.rcuts[0], order=self.radial_order
         )
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     def compute(self, context: DescriptorContext) -> MultipoleResult:
         return self.compute_from_radial(

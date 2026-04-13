@@ -283,6 +283,10 @@ DESCRIPTOR_CALCULATORS_NOT_LIST_ERROR = \
     "parameter 'descriptor_calculators' must be a list or tuple, get {} instead."
 DESCRIPTOR_CALCULATOR_NOT_DESCRIPTORCALCULATOR_ERROR = \
     "each descriptor calculator must be a DescriptorCalculator, get {} instead."
+DESCRIPTOR_CALCULATOR_NAME_NOT_STRING_ERROR = \
+    "descriptor calculator name must be a non-empty string, get {} instead."
+DESCRIPTOR_CALCULATOR_NAME_EMPTY_ERROR = \
+    "descriptor calculator name must be a non-empty string."
 DESCRIPTOR_CALCULATOR_DUPLICATE_NAME_ERROR = \
     "descriptor calculator names must be unique, found duplicates: {}."
 
@@ -965,6 +969,13 @@ class AtomicDFTSolver:
                 raise TypeError(
                     DESCRIPTOR_CALCULATOR_NOT_DESCRIPTORCALCULATOR_ERROR.format(type(calculator))
                 )
+            calculator_name = calculator.name
+            if not isinstance(calculator_name, str):
+                raise TypeError(
+                    DESCRIPTOR_CALCULATOR_NAME_NOT_STRING_ERROR.format(type(calculator_name))
+                )
+            if calculator_name == '':
+                raise ValueError(DESCRIPTOR_CALCULATOR_NAME_EMPTY_ERROR)
         descriptor_names = [calculator.name for calculator in self.descriptor_calculators]
         duplicate_names = sorted({name for name in descriptor_names if descriptor_names.count(name) > 1})
         if duplicate_names:

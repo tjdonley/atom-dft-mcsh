@@ -120,9 +120,24 @@ def compute_descriptors(
     if l_max < 0:
         raise ValueError(f"l_max must be non-negative, got {l_max}")
 
+    if center is None:
+        center = (
+            (nx - 1) * hx / 2.0,
+            (ny - 1) * hy / 2.0,
+            (nz - 1) * hz / 2.0,
+        )
+    else:
+        if len(center) != 3:
+            raise ValueError(f"center must have length 3, got {center!r}")
+        center = tuple(float(value) for value in center)
+
     if eval_indices is None:
-        center_j = ny // 2
-        center_k = nz // 2
+        center_j = int(np.rint(center[1] / hy))
+        center_k = int(np.rint(center[2] / hz))
+        if not (0 <= center_j < ny and 0 <= center_k < nz):
+            raise ValueError(
+                f"center {center!r} lies outside the 3D grid for default sampling"
+            )
         eval_indices = np.column_stack(
             [
                 np.arange(nx),
@@ -136,12 +151,6 @@ def compute_descriptors(
         raise ValueError("eval_indices must have shape (n_eval, 3)")
 
     positions = eval_indices.astype(float) * np.array([hx, hy, hz])
-    if center is None:
-        center = (
-            (nx - 1) * hx / 2.0,
-            (ny - 1) * hy / 2.0,
-            (nz - 1) * hz / 2.0,
-        )
 
     descriptors = np.zeros((eval_indices.shape[0], len(rcuts), l_max + 1))
     stencils = [

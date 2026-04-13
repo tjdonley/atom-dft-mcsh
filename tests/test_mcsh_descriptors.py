@@ -288,3 +288,60 @@ class TestMultipoleCalculator:
         via_calc = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
 
         np.testing.assert_array_equal(direct.descriptors, via_calc.descriptors)
+
+    def test_compute_from_3d_default_sampling_honors_center(self):
+        from atom.descriptors import MultipoleCalculator
+
+        n = 21
+        h = 1.0
+        center = (10.0, 3.0, 7.0)
+        coords = np.arange(n) * h
+        X, Y, Z = np.meshgrid(coords, coords, coords, indexing="ij")
+        rho_3d = np.exp(
+            -((X - center[0]) ** 2 + (Y - center[1]) ** 2 + (Z - center[2]) ** 2)
+        )
+
+        calc = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[2.0],
+            l_max=1,
+            box_size=20.0,
+            spacing=h,
+        )
+
+        default_result = calc.compute_from_3d(rho_3d, spacing=(h, h, h), center=center)
+        default_profile = calc.extract_radial_profile(default_result)
+        default_center_index = int(np.argmin(default_profile["r"]))
+
+        explicit_indices = np.column_stack(
+            [
+                np.arange(n),
+                np.full(n, int(round(center[1] / h))),
+                np.full(n, int(round(center[2] / h))),
+            ]
+        )
+        explicit_result = calc.compute_from_3d(
+            rho_3d,
+            spacing=(h, h, h),
+            center=center,
+            eval_indices=explicit_indices,
+        )
+        explicit_profile = calc.extract_radial_profile(explicit_result)
+        explicit_center_index = int(np.argmin(explicit_profile["r"]))
+
+        assert default_profile["r"][default_center_index] == pytest.approx(
+            0.0, abs=1e-12
+        )
+        assert explicit_profile["r"][explicit_center_index] == pytest.approx(
+            0.0, abs=1e-12
+        )
+        assert abs(default_profile["descriptors"][default_center_index, 0, 1]) < 1e-12
+        np.testing.assert_array_equal(
+            default_result.grid_indices, explicit_result.grid_indices
+        )
+        np.testing.assert_allclose(
+            default_result.descriptors,
+            explicit_result.descriptors,
+            atol=1e-14,
+            rtol=0.0,
+        )
