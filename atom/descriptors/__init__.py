@@ -1,9 +1,10 @@
 from .base import DescriptorCalculator, DescriptorContext
-from .mcsh import MCSHCalculator, MCSHConfig
+from .calculator import MultipoleCalculator
+from .multipole import MultipoleResult
 
 __all__ = [
     "DescriptorCalculator",
     "DescriptorContext",
-    "MCSHCalculator",
-    "MCSHConfig",
+    "MultipoleCalculator",
+    "MultipoleResult",
 ]

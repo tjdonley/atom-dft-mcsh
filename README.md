@@ -87,7 +87,7 @@ results = solver.solve()
 
 ## MCSH descriptors
 
-ATOM can compute MCSH (Maxwell Cartesian Spherical Harmonic) multipole descriptors from the self-consistent electron density. These descriptors characterize the local density environment around the atom and are used as input features for machine-learning exchange-correlation functionals.
+ATOM can compute multipole descriptors from the self-consistent electron density. The current implementation supports the MCSH (Maxwell Cartesian Spherical Harmonic) angular basis as one concrete choice within that broader framework.
 
 ### Basic usage
 
@@ -95,27 +95,27 @@ Pass descriptor calculators to the solver to compute descriptors inline with the
 
 ```python
 from atom import AtomicDFTSolver
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
-# Configure descriptors: cutoff radii, angular orders, 3D grid
-config = MCSHConfig(
-    rcuts=[0.5, 1.0, 1.5, 2.0, 3.0, 4.0],  # cutoff radii in Bohr
-    l_max=2,                                   # up to quadrupole (l=0,1,2)
-    box_size=16.0,                             # cubic box side in Bohr
-    spacing=0.4,                               # grid spacing in Bohr
+calc = MultipoleCalculator(
+    angular_basis="mcsh",                     # current angular basis option
+    radial_basis="heaviside",                # or "legendre"
+    rcuts=[0.5, 1.0, 1.5, 2.0, 3.0, 4.0],
+    l_max=2,
+    box_size=16.0,
+    spacing=0.4,
 )
-mcsh_calc = MCSHCalculator(config)
 
 solver = AtomicDFTSolver(
     atomic_number=6,
     xc_functional="GGA_PBE",
-    descriptor_calculators=[mcsh_calc],
+    descriptor_calculators=[calc],
 )
 results = solver.solve()
 
 # Descriptors are in the result dict
-mcsh = results["descriptor_results"]["mcsh"]
-print(mcsh.descriptors.shape)  # (n_eval_points, n_rcuts, n_l)
+mp = results["descriptor_results"]["multipole"]
+print(mp.descriptors.shape)  # (n_eval_points, n_rcuts, n_l)
 ```
 
 ### Post-hoc computation
@@ -123,34 +123,38 @@ print(mcsh.descriptors.shape)  # (n_eval_points, n_rcuts, n_l)
 You can also compute descriptors after the fact from a saved density:
 
 ```python
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
-config = MCSHConfig(rcuts=[1.0, 2.0, 3.0], l_max=2)
-calc = MCSHCalculator(config)
+calc = MultipoleCalculator(
+    angular_basis="mcsh",
+    rcuts=[1.0, 2.0, 3.0],
+    l_max=2,
+)
 
 # From solver results
-mcsh = calc.compute_from_solver_result(results)
+mp = calc.compute_from_solver_result(results)
 
 # Or from raw radial arrays
-mcsh = calc.compute_from_radial(r_quadrature, rho)
+mp = calc.compute_from_radial(r_quadrature, rho)
 
 # Or from a pre-built 3D density grid
-mcsh = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
+mp = calc.compute_from_3d(rho_3d, spacing=(h, h, h))
 
 # Extract radial profile (distance from atom center)
-profile = calc.extract_radial_profile(mcsh)
+profile = calc.extract_radial_profile(mp)
 ```
 
 ### Legendre polynomial kernels
 
-By default, descriptors use the Heaviside (step function) radial kernel. You can also use Legendre polynomial kernels, which weight the density differently within the cutoff sphere:
+By default, descriptors use the Heaviside radial basis. You can also use Legendre polynomial kernels, which weight the density differently within the cutoff sphere:
 
 ```python
-config_lp2 = MCSHConfig(
+calc_lp2 = MultipoleCalculator(
+    angular_basis="mcsh",
     rcuts=[1.0, 2.0, 3.0, 4.0],
     l_max=2,
-    radial_type="legendre",  # "heaviside" (default) or "legendre"
-    radial_order=2,          # Legendre polynomial order
+    radial_basis="legendre",  # "heaviside" (default) or "legendre"
+    radial_order=2,
 )
 ```
 

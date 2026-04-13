@@ -22,7 +22,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from atom import AtomicDFTSolver
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
 
 ATOMS = {
@@ -46,31 +46,39 @@ SOLVER_KWARGS = dict(
 
 RCUTS = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0]
 CONFIGS = {
-    "heaviside": MCSHConfig(
-        rcuts=RCUTS, l_max=2, box_size=16.0, spacing=0.4, radial_type="heaviside"
-    ),
-    "legendre_0": MCSHConfig(
+    "heaviside": dict(
+        angular_basis="mcsh",
         rcuts=RCUTS,
         l_max=2,
         box_size=16.0,
         spacing=0.4,
-        radial_type="legendre",
+        radial_basis="heaviside",
+    ),
+    "legendre_0": dict(
+        angular_basis="mcsh",
+        rcuts=RCUTS,
+        l_max=2,
+        box_size=16.0,
+        spacing=0.4,
+        radial_basis="legendre",
         radial_order=0,
     ),
-    "legendre_1": MCSHConfig(
+    "legendre_1": dict(
+        angular_basis="mcsh",
         rcuts=RCUTS,
         l_max=2,
         box_size=16.0,
         spacing=0.4,
-        radial_type="legendre",
+        radial_basis="legendre",
         radial_order=1,
     ),
-    "legendre_2": MCSHConfig(
+    "legendre_2": dict(
+        angular_basis="mcsh",
         rcuts=RCUTS,
         l_max=2,
         box_size=16.0,
         spacing=0.4,
-        radial_type="legendre",
+        radial_basis="legendre",
         radial_order=2,
     ),
 }
@@ -107,7 +115,7 @@ def compute_atom_results() -> dict[str, dict[str, object]]:
         kernels: dict[str, object] = {}
         profiles: dict[str, dict[str, np.ndarray]] = {}
         for kernel_name, config in CONFIGS.items():
-            calc = MCSHCalculator(config)
+            calc = MultipoleCalculator(**config)
             mcsh_result = calc.compute_from_radial(r, rho)
             kernels[kernel_name] = mcsh_result
             profiles[kernel_name] = calc.extract_radial_profile(mcsh_result)
@@ -145,7 +153,9 @@ def build_summary(results: dict[str, dict[str, object]]) -> dict[str, object]:
         ci = center_idx(center_profile)
         heaviside_l0 = np.abs(center_profile["descriptors"][ci, :, 0])
         atom_summary["heaviside_center_l0"] = heaviside_l0.tolist()
-        atom_summary["heaviside_monotone"] = bool(np.all(np.diff(heaviside_l0) >= -1e-10))
+        atom_summary["heaviside_monotone"] = bool(
+            np.all(np.diff(heaviside_l0) >= -1e-10)
+        )
         atom_summary["heaviside_final_l0_fraction_of_Ne"] = float(
             heaviside_l0[-1] / ATOMS[atom]["Ne"]
         )
@@ -244,7 +254,9 @@ def plot_dipole_ratios(results: dict[str, dict[str, object]]) -> None:
             label=KERNEL_LABELS[kernel_name],
         )
 
-    ax.axhline(1.0e-2, linestyle="--", color="#444444", linewidth=1.2, label="1% threshold")
+    ax.axhline(
+        1.0e-2, linestyle="--", color="#444444", linewidth=1.2, label="1% threshold"
+    )
     ax.set_yscale("log")
     ax.set_ylim(1.0e-18, 1.0)
     ax.set_xticks(x)
@@ -256,7 +268,9 @@ def plot_dipole_ratios(results: dict[str, dict[str, object]]) -> None:
     save_figure(fig, "mcsh_center_dipole_ratio")
 
 
-def plot_lp0_parity(results: dict[str, dict[str, object]], summary: dict[str, object]) -> None:
+def plot_lp0_parity(
+    results: dict[str, dict[str, object]], summary: dict[str, object]
+) -> None:
     h = np.concatenate(
         [np.ravel(results[atom]["kernels"]["heaviside"].descriptors) for atom in ATOMS]
     )
@@ -300,7 +314,9 @@ def plot_lp0_parity(results: dict[str, dict[str, object]], summary: dict[str, ob
     save_figure(fig, "legendre_p0_parity")
 
 
-def plot_legendre_order_comparison(results: dict[str, dict[str, object]], atom: str = "O") -> None:
+def plot_legendre_order_comparison(
+    results: dict[str, dict[str, object]], atom: str = "O"
+) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharex=True)
     channel_info = [(0, "Center l=0"), (2, "Center l=2")]
 
