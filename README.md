@@ -89,6 +89,8 @@ results = solver.solve()
 
 ATOM can compute multipole descriptors from the self-consistent electron density. The current implementation supports the MCSH (Maxwell Cartesian Spherical Harmonic) angular basis as one concrete choice within that broader framework.
 
+For the full branch-specific usage and extension guide, see [`docs/tutorials/03_generalized_multipole_api.md`](docs/tutorials/03_generalized_multipole_api.md).
+
 ### Basic usage
 
 Pass descriptor calculators to the solver to compute descriptors inline with the SCF calculation:
