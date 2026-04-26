@@ -1,26 +1,16 @@
-"""End-to-end test: hydrogen atom SCF + MCSH descriptor computation.
-
-Runs the full atom-solver for hydrogen at publication quality, computes
-MCSH descriptors, and validates physical invariants.
-
-These tests are slow (~60-120 seconds).
-"""
+"""End-to-end tests for the generic multipole API using the MCSH basis."""
 
 import numpy as np
 import pytest
 
 from atom import AtomicDFTSolver
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
 
 @pytest.fixture(scope="module")
 def hydrogen_full_result():
-    """Run a full hydrogen calculation with MCSH descriptors.
-
-    Uses parameters close to the pipeline_B validation (matching the
-    atom-solver output that was validated against SPARC).
-    """
-    config = MCSHConfig(
+    calc = MultipoleCalculator(
+        angular_basis="mcsh",
         rcuts=[0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
         l_max=2,
         box_size=20.0,
@@ -31,91 +21,109 @@ def hydrogen_full_result():
         xc_functional="GGA_PBE",
         domain_size=20.0,
         verbose=False,
-        mcsh_config=config,
+        descriptor_calculators=[calc],
     )
     return solver.solve()
 
 
-class TestHydrogenSCFConvergence:
-    """Verify the hydrogen SCF calculation converges correctly."""
+class TestHydrogenMultipoleDescriptors:
+    """Verify MCSH-based multipole descriptors are physically reasonable."""
 
-    def test_converged(self, hydrogen_full_result):
-        assert hydrogen_full_result["converged"]
-
-    def test_energy_reasonable(self, hydrogen_full_result):
-        """Hydrogen total energy should be around -0.459 Ha (GGA_PBE)."""
-        E = hydrogen_full_result["energy"]
-        assert -0.50 < E < -0.40, f"H energy = {E} Ha, expected ~ -0.459"
-
-    def test_density_integrates_to_one(self, hydrogen_full_result):
-        """Radial density should integrate to ~1 electron."""
-        r = hydrogen_full_result["quadrature_nodes"]
-        rho = hydrogen_full_result["rho"]
-        w = hydrogen_full_result["quadrature_weights"]
-        # Integral of 4*pi*r^2*rho(r) dr
-        Ne = np.sum(4 * np.pi * r**2 * rho * w)
-        assert Ne == pytest.approx(1.0, abs=0.01), f"Ne = {Ne}, expected 1.0"
-
-
-class TestHydrogenMCSHDescriptors:
-    """Verify MCSH descriptors are physically reasonable."""
-
-    def test_mcsh_result_exists(self, hydrogen_full_result):
-        assert hydrogen_full_result["mcsh_result"] is not None
+    def test_multipole_result_exists(self, hydrogen_full_result):
+        assert hydrogen_full_result["descriptor_results"]["multipole"] is not None
 
     def test_descriptor_shape(self, hydrogen_full_result):
-        """6 rcuts, l_max=2 -> 3 channels."""
-        d = hydrogen_full_result["mcsh_result"].descriptors
-        assert d.shape[1] == 6  # rcuts
-        assert d.shape[2] == 3  # l=0,1,2
+        d = hydrogen_full_result["descriptor_results"]["multipole"].descriptors
+        assert d.shape[1] == 6
+        assert d.shape[2] == 3
 
     def test_all_finite(self, hydrogen_full_result):
-        d = hydrogen_full_result["mcsh_result"].descriptors
+        d = hydrogen_full_result["descriptor_results"]["multipole"].descriptors
         assert np.all(np.isfinite(d))
 
-    def test_l1_near_zero_at_center(self, hydrogen_full_result):
-        """Spherical H density: l=1 should vanish at atom center.
+    def test_solver_result_preserves_basis_metadata(self, hydrogen_full_result):
+        result = hydrogen_full_result["descriptor_results"]["multipole"]
+        assert result.angular_basis == "mcsh"
+        assert result.radial_basis == "heaviside"
 
-        Uses a grid-aligned config (spacing=0.4, box=12 so center=6.0 is
-        exactly on-grid) to get machine-precision zeros at the center point.
-        The main fixture uses spacing=0.3 where 10.0 / 0.3 is not an integer,
-        so the closest evaluation point is 0.3 Bohr off-center and l=1 is only
-        approximately zero there.
-        """
-        r = hydrogen_full_result["quadrature_nodes"]
-        rho = hydrogen_full_result["rho"]
-
-        # Grid-aligned config: center=6.0, spacing=0.4 -> 6.0/0.4=15 (integer)
-        config = MCSHConfig(rcuts=[1.0, 2.0, 3.0], l_max=2, box_size=12.0, spacing=0.4)
-        calc = MCSHCalculator(config)
-        mcsh = calc.compute_from_radial(r, rho)
-        profile = calc.extract_radial_profile(mcsh)
-
-        center_idx = np.argmin(profile["r"])
-        assert profile["r"][center_idx] < 1e-10, (
-            f"Expected center point at r=0, got r={profile['r'][center_idx]}"
-        )
-        l1 = profile["descriptors"][center_idx, :, 1]
-        assert np.all(np.abs(l1) < 1e-6), f"l=1 at center = {l1}"
-
-    def test_descriptors_match_standalone_on_same_density(
-        self, hydrogen_full_result
-    ):
-        """Descriptors computed through solver must match standalone package
-        when given the same density. This is the critical round-trip test."""
-        r = hydrogen_full_result["quadrature_nodes"]
-        rho = hydrogen_full_result["rho"]
-
-        config = MCSHConfig(
+    def test_post_hoc_matches_inline(self, hydrogen_full_result):
+        calc = MultipoleCalculator(
+            angular_basis="mcsh",
             rcuts=[0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            l_max=2, box_size=20.0, spacing=0.3,
+            l_max=2,
+            box_size=20.0,
+            spacing=0.3,
         )
-        calc = MCSHCalculator(config)
-
-        # Post-hoc computation from same density
-        post_hoc = calc.compute_from_radial(r, rho)
-
-        # Inline computation from solver
-        inline = hydrogen_full_result["mcsh_result"]
+        post_hoc = calc.compute_from_solver_result(hydrogen_full_result)
+        inline = hydrogen_full_result["descriptor_results"]["multipole"]
 
         np.testing.assert_array_equal(inline.descriptors, post_hoc.descriptors)
+
+    def test_extract_radial_profile(self, hydrogen_full_result):
+        calc = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[1.0, 2.0, 3.0],
+            l_max=2,
+            box_size=12.0,
+            spacing=0.4,
+        )
+        result = calc.compute_from_solver_result(hydrogen_full_result)
+        profile = calc.extract_radial_profile(result)
+
+        assert np.all(profile["r"] >= 0)
+        assert len(profile["r"]) == result.descriptors.shape[0]
+        assert profile["descriptors"].shape == result.descriptors.shape
+
+    def test_legendre_order0_equals_heaviside(self, hydrogen_full_result):
+        r = hydrogen_full_result["quadrature_nodes"]
+        rho = hydrogen_full_result["rho"]
+
+        heaviside = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[1.0, 2.0, 3.0],
+            l_max=2,
+            box_size=12.0,
+            spacing=0.4,
+            radial_basis="heaviside",
+        )
+        legendre0 = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[1.0, 2.0, 3.0],
+            l_max=2,
+            box_size=12.0,
+            spacing=0.4,
+            radial_basis="legendre",
+            radial_order=0,
+        )
+
+        h_result = heaviside.compute_from_radial(r, rho)
+        l_result = legendre0.compute_from_radial(r, rho)
+        np.testing.assert_allclose(
+            h_result.descriptors, l_result.descriptors, atol=1e-14
+        )
+
+    def test_legendre_order2_differs_from_heaviside(self, hydrogen_full_result):
+        r = hydrogen_full_result["quadrature_nodes"]
+        rho = hydrogen_full_result["rho"]
+
+        heaviside = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[1.0, 2.0, 3.0],
+            l_max=2,
+            box_size=12.0,
+            spacing=0.4,
+            radial_basis="heaviside",
+        )
+        legendre2 = MultipoleCalculator(
+            angular_basis="mcsh",
+            rcuts=[1.0, 2.0, 3.0],
+            l_max=2,
+            box_size=12.0,
+            spacing=0.4,
+            radial_basis="legendre",
+            radial_order=2,
+        )
+
+        h_result = heaviside.compute_from_radial(r, rho)
+        l_result = legendre2.compute_from_radial(r, rho)
+        assert not np.allclose(h_result.descriptors, l_result.descriptors)

@@ -10,6 +10,7 @@ Atom is a comprehensive implementation of Atomic Density Functional Theory (DFT)
 - All-electron and pseudopotential calculations
 - Self-consistent field (SCF) iterations with convergence control
 - High-order finite element discretization with Legendre-Gauss-Lobatto nodes
+- Generalized multipole descriptor post-processing with an explicit angular/radial basis split
 - Machine learning exchange-correlation potentials
 - Data generation and management tools
 
@@ -39,6 +40,7 @@ print(f"Number of iterations: {result.n_iterations}")
 
 - **[Installation Guide](installation.md)**: How to install and set up Atom
 - **[Basic Solver Usage](tutorials/01_basic_solver.md)**: Learn the basics of using the solver
+- **[Generalized Multipole API](tutorials/03_generalized_multipole_api.md)**: Branch-specific guide for multipole descriptor usage and extension
 - **[Loading Data](tutorials/02_data_loading.md)**: How to load and work with datasets
 - **[Cookbook](cookbook.md)**: Common tasks and examples
 - **[API Reference](api/reference.md)**: Complete API documentation

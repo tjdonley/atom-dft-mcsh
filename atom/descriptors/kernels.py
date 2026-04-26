@@ -14,6 +14,41 @@ class RadialKernel(Protocol):
     def as_dict(self) -> dict[str, float | str]: ...
 
 
+def build_radial_kernel(
+    radial_basis: str | RadialKernel,
+    radius: float,
+    order: int = 0,
+) -> RadialKernel:
+    """Construct a radial kernel for one cutoff radius.
+
+    Parameters
+    ----------
+    radial_basis : str or RadialKernel
+        Either a kernel instance or one of the supported string specifiers.
+    radius : float
+        Cutoff radius used for kernels defined on a compact sphere.
+    order : int
+        Polynomial order for Legendre kernels.
+    """
+    if hasattr(radial_basis, "evaluate"):
+        return radial_basis
+
+    if not isinstance(radial_basis, str):
+        raise TypeError(
+            f"radial_basis must be a string or kernel-like object, got {type(radial_basis)!r}"
+        )
+
+    normalized = radial_basis.lower()
+    if normalized == "heaviside":
+        return HeavisideKernel(radius=radius)
+    if normalized == "legendre":
+        return LegendreKernel(radius=radius, order=order)
+
+    raise ValueError(
+        f"radial_basis must be 'heaviside' or 'legendre', got {radial_basis!r}"
+    )
+
+
 @dataclass(frozen=True)
 class HeavisideKernel:
     radius: float

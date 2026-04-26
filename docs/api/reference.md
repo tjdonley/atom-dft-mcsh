@@ -2,6 +2,22 @@
 
 Complete API documentation for Atom.
 
+## Generalized Multipole Descriptors
+
+For the branch-specific usage and extension guide for the generalized descriptor framework, see [`tutorials/03_generalized_multipole_api.md`](../tutorials/03_generalized_multipole_api.md).
+
+Public descriptor-facing classes on this branch:
+
+- `atom.descriptors.MultipoleCalculator`
+- `atom.descriptors.MultipoleResult`
+- `atom.descriptors.DescriptorCalculator`
+- `atom.descriptors.DescriptorContext`
+
+Current public string options:
+
+- `angular_basis="mcsh"`
+- `radial_basis in {"heaviside", "legendre"}`
+
 ## Main Classes
 
 ### AtomicDFTSolver

@@ -7,6 +7,8 @@ chapters:
   - file: installation
   - file: tutorials/01_basic_solver
     title: Basic Solver Usage
+  - file: tutorials/03_generalized_multipole_api
+    title: Generalized Multipole API
   - file: tutorials/02_data_loading
     title: Loading Data
   - file: cookbook

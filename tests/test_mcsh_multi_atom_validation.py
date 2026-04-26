@@ -1,4 +1,4 @@
-"""Comprehensive multi-atom MCSH descriptor validation.
+"""Comprehensive multi-atom descriptor validation using the MCSH basis.
 
 Runs the atom-DFT solver for H, He, Li, Be, C, N, O with both Heaviside
 and Legendre radial kernels. Validates physical invariants that must hold
@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from atom import AtomicDFTSolver
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
 
 # ---------------------------------------------------------------------------
@@ -30,13 +30,13 @@ ATOMS = {
     # Ne_valence = electrons treated by solver (pseudopotential freezes core)
     # H, He, Li, Be: all-electron (no frozen core in these PSPs)
     # C, N, O: 1s^2 core frozen, so Ne_valence = Z - 2
-    "H":  {"Z": 1,  "Ne": 1,  "E_range": (-0.50, -0.40)},
-    "He": {"Z": 2,  "Ne": 2,  "E_range": (-3.00, -2.70)},
-    "Li": {"Z": 3,  "Ne": 3,  "E_range": (-7.50, -6.80)},
-    "Be": {"Z": 4,  "Ne": 4,  "E_range": (-14.0, -13.0)},
-    "C":  {"Z": 6,  "Ne": 4,  "E_range": (-6.0, -5.0)},
-    "N":  {"Z": 7,  "Ne": 5,  "E_range": (-11.0, -9.5)},
-    "O":  {"Z": 8,  "Ne": 6,  "E_range": (-17.0, -15.5)},
+    "H": {"Z": 1, "Ne": 1, "E_range": (-0.50, -0.40)},
+    "He": {"Z": 2, "Ne": 2, "E_range": (-3.00, -2.70)},
+    "Li": {"Z": 3, "Ne": 3, "E_range": (-7.50, -6.80)},
+    "Be": {"Z": 4, "Ne": 4, "E_range": (-14.0, -13.0)},
+    "C": {"Z": 6, "Ne": 4, "E_range": (-6.0, -5.0)},
+    "N": {"Z": 7, "Ne": 5, "E_range": (-11.0, -9.5)},
+    "O": {"Z": 8, "Ne": 6, "E_range": (-17.0, -15.5)},
 }
 
 # Fast but converged solver parameters
@@ -49,28 +49,25 @@ SOLVER_KWARGS = dict(
     verbose=False,
 )
 
-# MCSH parameters for validation
+# Multipole parameters for validation (using the MCSH angular basis)
 RCUTS = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0]
-MCSH_HEAVISIDE = MCSHConfig(
-    rcuts=RCUTS, l_max=2, box_size=16.0, spacing=0.4, radial_type="heaviside",
+MULTIPOLE_BASE_KWARGS = dict(
+    angular_basis="mcsh",
+    rcuts=RCUTS,
+    l_max=2,
+    box_size=16.0,
+    spacing=0.4,
 )
-MCSH_LEGENDRE_0 = MCSHConfig(
-    rcuts=RCUTS, l_max=2, box_size=16.0, spacing=0.4,
-    radial_type="legendre", radial_order=0,
-)
-MCSH_LEGENDRE_1 = MCSHConfig(
-    rcuts=RCUTS, l_max=2, box_size=16.0, spacing=0.4,
-    radial_type="legendre", radial_order=1,
-)
-MCSH_LEGENDRE_2 = MCSHConfig(
-    rcuts=RCUTS, l_max=2, box_size=16.0, spacing=0.4,
-    radial_type="legendre", radial_order=2,
-)
+
+
+def make_calc(**overrides):
+    return MultipoleCalculator(**(MULTIPOLE_BASE_KWARGS | overrides))
 
 
 # ---------------------------------------------------------------------------
 # Module-scoped fixtures: run each atom ONCE, reuse across all tests
 # ---------------------------------------------------------------------------
+
 
 def _run_atom(Z):
     """Run solver for atom Z and compute descriptors for all kernel types."""
@@ -80,10 +77,10 @@ def _run_atom(Z):
     r = result["quadrature_nodes"]
     rho = result["rho"]
 
-    h_calc = MCSHCalculator(MCSH_HEAVISIDE)
-    l0_calc = MCSHCalculator(MCSH_LEGENDRE_0)
-    l1_calc = MCSHCalculator(MCSH_LEGENDRE_1)
-    l2_calc = MCSHCalculator(MCSH_LEGENDRE_2)
+    h_calc = make_calc(radial_basis="heaviside")
+    l0_calc = make_calc(radial_basis="legendre", radial_order=0)
+    l1_calc = make_calc(radial_basis="legendre", radial_order=1)
+    l2_calc = make_calc(radial_basis="legendre", radial_order=2)
 
     return {
         "solver_result": result,
@@ -91,9 +88,7 @@ def _run_atom(Z):
         "legendre_0": l0_calc.compute_from_radial(r, rho),
         "legendre_1": l1_calc.compute_from_radial(r, rho),
         "legendre_2": l2_calc.compute_from_radial(r, rho),
-        "h_profile": h_calc.extract_radial_profile(
-            h_calc.compute_from_radial(r, rho)
-        ),
+        "h_profile": h_calc.extract_radial_profile(h_calc.compute_from_radial(r, rho)),
     }
 
 
@@ -110,6 +105,7 @@ def all_atom_results():
 # Helper
 # ---------------------------------------------------------------------------
 
+
 def _center_idx(profile):
     """Find the evaluation point closest to the atom center."""
     return int(np.argmin(profile["r"]))
@@ -118,6 +114,7 @@ def _center_idx(profile):
 # =========================================================================
 # TEST CLASS 1: SCF convergence for all atoms
 # =========================================================================
+
 
 class TestSCFConvergence:
     """Every atom must converge with physically reasonable energy."""
@@ -151,6 +148,7 @@ class TestSCFConvergence:
 # TEST CLASS 2: Charge sum rule (l=0 at large Rcut -> N_e)
 # =========================================================================
 
+
 class TestChargeSumRule:
     """l=0 descriptor at atom center with large Rcut must approach N_electrons.
 
@@ -169,7 +167,7 @@ class TestChargeSumRule:
         for i in range(len(l0_vals) - 1):
             assert l0_vals[i + 1] >= l0_vals[i] - 1e-10, (
                 f"{atom}: l=0 not monotone: "
-                f"Rcut={RCUTS[i]}->{RCUTS[i+1]}: {l0_vals[i]:.6f}->{l0_vals[i+1]:.6f}"
+                f"Rcut={RCUTS[i]}->{RCUTS[i + 1]}: {l0_vals[i]:.6f}->{l0_vals[i + 1]:.6f}"
             )
 
         # 2. At largest Rcut (4.0 Bohr), must capture >80% of electrons
@@ -204,6 +202,7 @@ class TestChargeSumRule:
 # TEST CLASS 3: Dipole vanishing (l=1 = 0 at center)
 # =========================================================================
 
+
 class TestDipoleVanishing:
     """l=1 must vanish at atom center for all spherically symmetric atoms."""
 
@@ -227,6 +226,7 @@ class TestDipoleVanishing:
 # TEST CLASS 4: Monotonicity of l=0 with Rcut
 # =========================================================================
 
+
 class TestMonotonicity:
     """l=0 magnitude must increase with Rcut (more charge enclosed)."""
 
@@ -238,7 +238,7 @@ class TestMonotonicity:
         for i in range(len(l0) - 1):
             assert l0[i + 1] >= l0[i] - 1e-10, (
                 f"{atom}: |l=0| not monotone: "
-                f"Rcut={RCUTS[i]}->{RCUTS[i+1]}: {l0[i]:.6f}->{l0[i+1]:.6f}"
+                f"Rcut={RCUTS[i]}->{RCUTS[i + 1]}: {l0[i]:.6f}->{l0[i + 1]:.6f}"
             )
 
 
@@ -246,11 +246,14 @@ class TestMonotonicity:
 # TEST CLASS 5: Finiteness
 # =========================================================================
 
+
 class TestFiniteness:
     """No NaN or Inf in any descriptor for any atom or kernel."""
 
     @pytest.mark.parametrize("atom", list(ATOMS.keys()))
-    @pytest.mark.parametrize("kernel", ["heaviside", "legendre_0", "legendre_1", "legendre_2"])
+    @pytest.mark.parametrize(
+        "kernel", ["heaviside", "legendre_0", "legendre_1", "legendre_2"]
+    )
     def test_all_finite(self, all_atom_results, atom, kernel):
         d = all_atom_results[atom][kernel].descriptors
         assert np.all(np.isfinite(d)), (
@@ -262,6 +265,7 @@ class TestFiniteness:
 # TEST CLASS 6: Kernel identity (LP0 == Heaviside)
 # =========================================================================
 
+
 class TestKernelIdentity:
     """Legendre order 0 must exactly equal Heaviside for all atoms."""
 
@@ -269,12 +273,15 @@ class TestKernelIdentity:
     def test_lp0_equals_heaviside(self, all_atom_results, atom):
         h = all_atom_results[atom]["heaviside"].descriptors
         l0 = all_atom_results[atom]["legendre_0"].descriptors
-        np.testing.assert_allclose(h, l0, atol=1e-14, err_msg=f"{atom}: LP0 != Heaviside")
+        np.testing.assert_allclose(
+            h, l0, atol=1e-14, err_msg=f"{atom}: LP0 != Heaviside"
+        )
 
 
 # =========================================================================
 # TEST CLASS 7: Legendre produces distinct values
 # =========================================================================
+
 
 class TestLegendreDiversity:
     """Different Legendre orders must produce different descriptor values."""
@@ -291,14 +298,13 @@ class TestLegendreDiversity:
     def test_lp2_differs_from_lp1(self, all_atom_results, atom):
         l1 = all_atom_results[atom]["legendre_1"].descriptors
         l2 = all_atom_results[atom]["legendre_2"].descriptors
-        assert not np.allclose(l1, l2, atol=1e-6), (
-            f"{atom}: LP2 should differ from LP1"
-        )
+        assert not np.allclose(l1, l2, atol=1e-6), f"{atom}: LP2 should differ from LP1"
 
 
 # =========================================================================
 # TEST CLASS 8: Cross-atom descriptor consistency
 # =========================================================================
+
 
 class TestCrossAtomConsistency:
     """Descriptors must be consistent across atoms."""
@@ -311,9 +317,7 @@ class TestCrossAtomConsistency:
         }
         ref = shapes["H"]
         for name, shape in shapes.items():
-            assert shape == ref, (
-                f"{name} shape {shape} != H shape {ref}"
-            )
+            assert shape == ref, f"{name} shape {shape} != H shape {ref}"
 
     def test_l0_ordering_by_Z(self, all_atom_results):
         """At Rcut=4.0, l=0 should roughly increase with Z (more electrons)."""
@@ -336,6 +340,7 @@ class TestCrossAtomConsistency:
 # TEST CLASS 9: Legendre physical properties across atoms
 # =========================================================================
 
+
 class TestLegendrePhysics:
     """Legendre kernel descriptors must satisfy physical expectations."""
 
@@ -345,7 +350,9 @@ class TestLegendrePhysics:
         For atoms with concentrated density, l=0 with LP1 at small Rcut
         may be negative (density concentrated in inner half)."""
         l1_data = all_atom_results[atom]["legendre_1"]
-        profile = MCSHCalculator(MCSH_LEGENDRE_1).extract_radial_profile(l1_data)
+        profile = make_calc(
+            radial_basis="legendre", radial_order=1
+        ).extract_radial_profile(l1_data)
         ci = _center_idx(profile)
         l0_vals = profile["descriptors"][ci, :, 0]
         # At least some rcuts should give negative l=0 for LP1
@@ -362,12 +369,12 @@ class TestLegendrePhysics:
         """Even with Legendre kernels, l=1 must vanish at center (spherical symmetry)."""
         for kernel_name in ["legendre_0", "legendre_1", "legendre_2"]:
             data = all_atom_results[atom][kernel_name]
-            config = {
-                "legendre_0": MCSH_LEGENDRE_0,
-                "legendre_1": MCSH_LEGENDRE_1,
-                "legendre_2": MCSH_LEGENDRE_2,
+            kwargs = {
+                "legendre_0": dict(radial_basis="legendre", radial_order=0),
+                "legendre_1": dict(radial_basis="legendre", radial_order=1),
+                "legendre_2": dict(radial_basis="legendre", radial_order=2),
             }[kernel_name]
-            profile = MCSHCalculator(config).extract_radial_profile(data)
+            profile = make_calc(**kwargs).extract_radial_profile(data)
             ci = _center_idx(profile)
             l1 = profile["descriptors"][ci, :, 1]
             l0 = np.abs(profile["descriptors"][ci, :, 0])

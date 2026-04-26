@@ -1,11 +1,11 @@
-"""MCSH (Maxwell Cartesian Spherical Harmonic) descriptor computation.
+"""Generic multipole descriptor engine.
 
-Computes HSMP (Heaviside Step Multipole) descriptors matching the SPARC PBEq
-C implementation (ssahoo41/dev_SPARC_PBEq).
+The multipole framework is defined by three independent choices:
+- an angular basis (e.g. ``"mcsh"``)
+- a radial basis (e.g. ``"heaviside"`` or ``"legendre"``)
+- an evaluation source (radial density projected to 3D or direct 3D density)
 
-References:
-    Sahoo, J. (2024). PhD Thesis, Georgia Tech. Chapter 2.
-    SPARC source: dev_SPARC_PBEq/src/multipole_features/MCSHHelper.c
+MCSH is one concrete angular basis within this broader framework.
 """
 
 from __future__ import annotations
@@ -16,44 +16,43 @@ from typing import Sequence
 
 import numpy as np
 
+from .basis import resolve_angular_basis
+from .kernels import build_radial_kernel
 
-# MCSH component definitions: {l: [(index_label, power_spectrum_weight), ...]}
-# l=0: 1 component (monopole)
-# l=1: 3 components (dipole)
-# l=2: 6 components (quadrupole) - note these are NOT traceless
-MCSH_COMPONENTS = {
-    0: [("000", 1.0)],
-    1: [("100", 1.0), ("010", 1.0), ("001", 1.0)],
-    2: [("200", 1.0), ("020", 1.0), ("002", 1.0),
-        ("110", 2.0), ("101", 2.0), ("011", 2.0)],
-}
+
+def normalize_spacing(
+    spacing: float | tuple[float, float, float],
+) -> tuple[float, float, float]:
+    """Normalize scalar or tuple spacing input to a 3-tuple."""
+    if isinstance(spacing, (int, float)):
+        spacing = float(spacing)
+        if spacing <= 0.0:
+            raise ValueError(f"spacing must be positive, got {spacing}")
+        return (spacing, spacing, spacing)
+
+    if len(spacing) != 3:
+        raise ValueError(f"spacing must have length 3, got {spacing!r}")
+
+    spacing_tuple = tuple(float(value) for value in spacing)
+    if any(value <= 0.0 for value in spacing_tuple):
+        raise ValueError(f"spacing values must be positive, got {spacing_tuple!r}")
+    return spacing_tuple
 
 
 @dataclass
-class MCSHResult:
-    """Result of MCSH descriptor computation.
+class MultipoleResult:
+    """Result of generic multipole descriptor computation."""
 
-    Attributes
-    ----------
-    grid_indices : (n_eval, 3) int array
-        Grid indices (i, j, k) of evaluation points.
-    grid_positions : (n_eval, 3) float array
-        Cartesian positions (x, y, z) in Bohr.
-    descriptors : (n_eval, n_rcuts, n_l) float array
-        Power spectrum P_l(r, Rcut) at each evaluation point.
-    rcuts : list of float
-        Cutoff radii used (Bohr).
-    l_max : int
-        Maximum angular momentum.
-    spacing : (3,) tuple
-        Grid spacing (hx, hy, hz) in Bohr.
-    """
     grid_indices: np.ndarray
     grid_positions: np.ndarray
     descriptors: np.ndarray
     rcuts: list[float]
     l_max: int
     spacing: tuple[float, float, float]
+    angular_basis: str
+    radial_basis: str
+    radial_order: int
+    center: tuple[float, float, float]
 
     def to_npz(self, path: str | Path) -> None:
         np.savez_compressed(
@@ -64,35 +63,21 @@ class MCSHResult:
             rcuts=np.array(self.rcuts),
             l_max=self.l_max,
             spacing=np.array(self.spacing),
+            angular_basis=self.angular_basis,
+            radial_basis=self.radial_basis,
+            radial_order=self.radial_order,
+            center=np.array(self.center),
         )
 
 
-def mcsh_harmonic(dx: np.ndarray, dy: np.ndarray, dz: np.ndarray,
-                  l: int, n: str) -> np.ndarray:
-    """Evaluate MCSH Cartesian harmonic S_n^l at displacement (dx, dy, dz).
-
-    Matches SPARC C code (MCSHHelper.c) definitions exactly.
-    Inputs can be arrays (broadcast).
-    """
-    if l == 0 and n == "000":
-        return np.ones_like(dx)
-    elif l == 1:
-        if n == "100": return dx
-        if n == "010": return dy
-        if n == "001": return dz
-    elif l == 2:
-        if n == "200": return 3.0 * dx * dx - 1.0
-        if n == "020": return 3.0 * dy * dy - 1.0
-        if n == "002": return 3.0 * dz * dz - 1.0
-        if n == "110": return 3.0 * dx * dy
-        if n == "101": return 3.0 * dx * dz
-        if n == "011": return 3.0 * dy * dz
-    raise ValueError(f"Unknown MCSH component l={l}, n={n}")
-
-
-def _build_stencil(rcut: float, hx: float, hy: float, hz: float,
-                   radial_type: str = "heaviside", radial_order: int = 0):
-    """Precompute stencil displacements and radial weights for a given rcut."""
+def _build_stencil(
+    rcut: float,
+    spacing: tuple[float, float, float],
+    radial_basis: str,
+    radial_order: int = 0,
+):
+    """Precompute stencil displacements and radial weights for a given cutoff."""
+    hx, hy, hz = spacing
     ri = int(np.ceil(rcut / hx))
     rj = int(np.ceil(rcut / hy))
     rk = int(np.ceil(rcut / hz))
@@ -100,158 +85,90 @@ def _build_stencil(rcut: float, hx: float, hy: float, hz: float,
     di = np.arange(-ri, ri + 1)
     dj = np.arange(-rj, rj + 1)
     dk = np.arange(-rk, rk + 1)
-    DI, DJ, DK = np.meshgrid(di, dj, dk, indexing='ij')
+    DI, DJ, DK = np.meshgrid(di, dj, dk, indexing="ij")
     dx = DI * hx
     dy = DJ * hy
     dz = DK * hz
     r = np.sqrt(dx**2 + dy**2 + dz**2)
-    mask = r <= rcut
-
-    if radial_type == "heaviside":
-        weights = mask.astype(float)
-    elif radial_type == "legendre":
-        from scipy.special import eval_legendre
-        r_scaled = np.where(mask, (2.0 * r - rcut) / rcut, 0.0)
-        weights = np.where(mask, eval_legendre(radial_order, r_scaled), 0.0)
-    else:
-        raise ValueError(f"Unknown radial_type: {radial_type!r}")
+    kernel = build_radial_kernel(radial_basis, radius=rcut, order=radial_order)
+    weights = kernel.evaluate(r)
 
     return DI, DJ, DK, dx, dy, dz, weights
 
 
-def compute_mcsh_at_point(rho_3d: np.ndarray, spacing: tuple[float, float, float],
-                          i0: int, j0: int, k0: int, rcut: float,
-                          l_max: int = 2, periodic: bool = True,
-                          radial_type: str = "heaviside",
-                          radial_order: int = 0) -> dict[int, float]:
-    """Compute MCSH power spectrum at a single grid point.
-
-    Parameters
-    ----------
-    rho_3d : (nx, ny, nz) array
-        3D electron density.
-    spacing : (hx, hy, hz)
-        Grid spacing in Bohr.
-    i0, j0, k0 : int
-        Grid indices of evaluation point.
-    rcut : float
-        Cutoff radius in Bohr.
-    l_max : int
-        Maximum angular momentum (default 2).
-    periodic : bool
-        Use periodic boundary conditions.
-
-    Returns
-    -------
-    dict mapping l -> P_l (power spectrum value)
-    """
-    hx, hy, hz = spacing
-    nx, ny, nz = rho_3d.shape
-    dV = hx * hy * hz
-
-    DI, DJ, DK, dx, dy, dz, weights = _build_stencil(rcut, hx, hy, hz,
-                                                       radial_type, radial_order)
-
-    if periodic:
-        ii = (i0 + DI) % nx
-        jj = (j0 + DJ) % ny
-        kk = (k0 + DK) % nz
-        boundary_weights = weights
-    else:
-        ii_raw = i0 + DI
-        jj_raw = j0 + DJ
-        kk_raw = k0 + DK
-        valid = (
-            (ii_raw >= 0) & (ii_raw < nx) &
-            (jj_raw >= 0) & (jj_raw < ny) &
-            (kk_raw >= 0) & (kk_raw < nz)
-        )
-        ii = np.where(valid, ii_raw, 0)
-        jj = np.where(valid, jj_raw, 0)
-        kk = np.where(valid, kk_raw, 0)
-        boundary_weights = weights * valid
-
-    rho_vals = rho_3d[ii, jj, kk]
-    weighted_rho_dV = boundary_weights * rho_vals * dV
-
-    result = {}
-    for l in range(l_max + 1):
-        if l == 0:
-            # l=0 monopole: return raw (signed) zeta, matching SPARC C code.
-            # The sign carries physical meaning for Legendre kernels.
-            S = mcsh_harmonic(dx, dy, dz, 0, "000")
-            result[0] = float(np.sum(S * weighted_rho_dV))
-        else:
-            # l>=1: rotationally invariant power spectrum (always non-negative)
-            power = 0.0
-            for n, coeff in MCSH_COMPONENTS[l]:
-                S = mcsh_harmonic(dx, dy, dz, l, n)
-                zeta_n = float(np.sum(S * weighted_rho_dV))
-                power += coeff * zeta_n * zeta_n
-            result[l] = np.sqrt(power)
-
-    return result
-
-
-def compute_descriptors(rho_3d: np.ndarray, spacing: tuple[float, float, float],
-                        rcuts: Sequence[float], l_max: int = 2,
-                        eval_indices: np.ndarray | None = None,
-                        periodic: bool = True,
-                        radial_type: str = "heaviside",
-                        radial_order: int = 0) -> MCSHResult:
-    """Compute MCSH descriptors at grid points.
-
-    Parameters
-    ----------
-    rho_3d : (nx, ny, nz) array
-        3D electron density (1/Bohr^3).
-    spacing : (hx, hy, hz) tuple
-        Grid spacing in Bohr.
-    rcuts : sequence of float
-        Cutoff radii in Bohr.
-    l_max : int
-        Maximum angular momentum (default 2).
-    eval_indices : (n_eval, 3) int array, optional
-        Grid indices (i, j, k) to evaluate at. If None, evaluates along
-        the x-axis through the grid center (useful for radially symmetric
-        densities).
-    periodic : bool
-        Use periodic boundary conditions (default True).
-
-    Returns
-    -------
-    MCSHResult
-    """
-    hx, hy, hz = spacing
+def compute_descriptors(
+    rho_3d: np.ndarray,
+    spacing: float | tuple[float, float, float],
+    rcuts: Sequence[float],
+    angular_basis: str = "mcsh",
+    l_max: int = 2,
+    eval_indices: np.ndarray | None = None,
+    periodic: bool = True,
+    radial_basis: str = "heaviside",
+    radial_order: int = 0,
+    center: tuple[float, float, float] | None = None,
+) -> MultipoleResult:
+    """Compute multipole descriptors at grid points on a 3D density grid."""
+    hx, hy, hz = normalize_spacing(spacing)
+    basis = resolve_angular_basis(angular_basis)
     nx, ny, nz = rho_3d.shape
     rcuts = list(rcuts)
-    n_rcuts = len(rcuts)
-    n_l = l_max + 1
+    if not rcuts:
+        raise ValueError("rcuts must be a non-empty sequence")
+    if any(rcut <= 0.0 for rcut in rcuts):
+        raise ValueError("All rcut values must be strictly positive")
+    if l_max < 0:
+        raise ValueError(f"l_max must be non-negative, got {l_max}")
+
+    if center is None:
+        center = (
+            (nx - 1) * hx / 2.0,
+            (ny - 1) * hy / 2.0,
+            (nz - 1) * hz / 2.0,
+        )
+    else:
+        if len(center) != 3:
+            raise ValueError(f"center must have length 3, got {center!r}")
+        center = tuple(float(value) for value in center)
 
     if eval_indices is None:
-        center_j = ny // 2
-        center_k = nz // 2
-        eval_indices = np.column_stack([
-            np.arange(nx),
-            np.full(nx, center_j),
-            np.full(nx, center_k),
-        ])
+        center_j = int(np.rint(center[1] / hy))
+        center_k = int(np.rint(center[2] / hz))
+        if not (0 <= center_j < ny and 0 <= center_k < nz):
+            raise ValueError(
+                f"center {center!r} lies outside the 3D grid for default sampling"
+            )
+        eval_indices = np.column_stack(
+            [
+                np.arange(nx),
+                np.full(nx, center_j),
+                np.full(nx, center_k),
+            ]
+        )
 
     eval_indices = np.asarray(eval_indices, dtype=int)
-    n_eval = eval_indices.shape[0]
+    if eval_indices.ndim != 2 or eval_indices.shape[1] != 3:
+        raise ValueError("eval_indices must have shape (n_eval, 3)")
+
     positions = eval_indices.astype(float) * np.array([hx, hy, hz])
 
-    descriptors = np.zeros((n_eval, n_rcuts, n_l))
-
-    # Precompute stencils for each rcut
-    stencils = [_build_stencil(rcut, hx, hy, hz, radial_type, radial_order) for rcut in rcuts]
+    descriptors = np.zeros((eval_indices.shape[0], len(rcuts), l_max + 1))
+    stencils = [
+        _build_stencil(
+            rcut=rcut,
+            spacing=(hx, hy, hz),
+            radial_basis=radial_basis,
+            radial_order=radial_order,
+        )
+        for rcut in rcuts
+    ]
 
     dV = hx * hy * hz
 
-    for idx in range(n_eval):
-        i0, j0, k0 = int(eval_indices[idx, 0]), int(eval_indices[idx, 1]), int(eval_indices[idx, 2])
+    for idx in range(eval_indices.shape[0]):
+        i0, j0, k0 = (int(eval_indices[idx, axis]) for axis in range(3))
 
-        for rc_idx, (DI, DJ, DK, dx, dy, dz, weights) in enumerate(stencils):
+        for rcut_index, (DI, DJ, DK, dx, dy, dz, weights) in enumerate(stencils):
             if periodic:
                 ii = (i0 + DI) % nx
                 jj = (j0 + DJ) % ny
@@ -262,9 +179,12 @@ def compute_descriptors(rho_3d: np.ndarray, spacing: tuple[float, float, float],
                 jj_raw = j0 + DJ
                 kk_raw = k0 + DK
                 valid = (
-                    (ii_raw >= 0) & (ii_raw < nx) &
-                    (jj_raw >= 0) & (jj_raw < ny) &
-                    (kk_raw >= 0) & (kk_raw < nz)
+                    (ii_raw >= 0)
+                    & (ii_raw < nx)
+                    & (jj_raw >= 0)
+                    & (jj_raw < ny)
+                    & (kk_raw >= 0)
+                    & (kk_raw < nz)
                 )
                 ii = np.where(valid, ii_raw, 0)
                 jj = np.where(valid, jj_raw, 0)
@@ -274,27 +194,25 @@ def compute_descriptors(rho_3d: np.ndarray, spacing: tuple[float, float, float],
             rho_vals = rho_3d[ii, jj, kk]
             weighted_rho_dV = local_weights * rho_vals * dV
 
-            for l in range(n_l):
-                if l == 0:
-                    # l=0 monopole: raw signed zeta (matches SPARC C code)
-                    S = mcsh_harmonic(dx, dy, dz, 0, "000")
-                    descriptors[idx, rc_idx, 0] = float(np.sum(S * weighted_rho_dV))
-                else:
-                    # l>=1: rotationally invariant power spectrum
-                    power = 0.0
-                    for n, coeff in MCSH_COMPONENTS[l]:
-                        S = mcsh_harmonic(dx, dy, dz, l, n)
-                        zeta_n = float(np.sum(S * weighted_rho_dV))
-                        power += coeff * zeta_n * zeta_n
-                    descriptors[idx, rc_idx, l] = np.sqrt(power)
+            for l in range(l_max + 1):
+                components = []
+                for label, weight in basis.component_specs(l):
+                    harmonic = basis.evaluate_component(dx, dy, dz, l, label)
+                    zeta = float(np.sum(harmonic * weighted_rho_dV))
+                    components.append((weight, zeta))
+                descriptors[idx, rcut_index, l] = basis.combine_invariant(l, components)
 
-    return MCSHResult(
+    return MultipoleResult(
         grid_indices=eval_indices,
         grid_positions=positions,
         descriptors=descriptors,
         rcuts=rcuts,
         l_max=l_max,
         spacing=(hx, hy, hz),
+        angular_basis=basis.name,
+        radial_basis=radial_basis,
+        radial_order=radial_order,
+        center=center,
     )
 
 
@@ -305,51 +223,30 @@ def compute_descriptors_from_radial(
     spacing: float,
     atom_center: tuple[float, float, float],
     rcuts: Sequence[float],
+    angular_basis: str = "mcsh",
     l_max: int = 2,
     eval_indices: np.ndarray | None = None,
     periodic: bool = True,
-    radial_type: str = "heaviside",
+    radial_basis: str = "heaviside",
     radial_order: int = 0,
-) -> MCSHResult:
-    """Project a radial density onto a 3D grid and compute MCSH descriptors.
-
-    Convenience wrapper for the atom-solver workflow:
-    radial rho(r) -> project to 3D grid -> compute MCSH.
-
-    Parameters
-    ----------
-    r_radial : (M,) array
-        Radial grid in Bohr (strictly increasing).
-    rho_radial : (M,) array
-        Radial density values (1/Bohr^3).
-    box_size : float
-        Cubic box side length in Bohr.
-    spacing : float
-        Grid spacing in Bohr (uniform in all directions).
-    atom_center : (3,) tuple
-        Atom position in Bohr.
-    rcuts : sequence of float
-        Cutoff radii in Bohr.
-    l_max : int
-        Maximum angular momentum (default 2).
-    eval_indices : (n_eval, 3) int array, optional
-        Grid indices to evaluate at.
-    periodic : bool
-        Use periodic boundary conditions (default True).
-
-    Returns
-    -------
-    MCSHResult
-    """
+) -> MultipoleResult:
+    """Project a radial density onto a 3D grid and compute multipole descriptors."""
     from .grid3d import grid_radial_distances, make_cartesian_grid, project_radial_to_3d
 
     x_1d, X, Y, Z = make_cartesian_grid(box_size, spacing)
-    h_actual = float(x_1d[1] - x_1d[0]) if len(x_1d) > 1 else spacing
+    h_actual = float(x_1d[1] - x_1d[0]) if len(x_1d) > 1 else float(spacing)
     R_3d = grid_radial_distances(X, Y, Z, atom_center)
     rho_3d = project_radial_to_3d(r_radial, rho_radial, R_3d)
 
     return compute_descriptors(
-        rho_3d, (h_actual, h_actual, h_actual), rcuts,
-        l_max=l_max, eval_indices=eval_indices, periodic=periodic,
-        radial_type=radial_type, radial_order=radial_order,
+        rho_3d=rho_3d,
+        spacing=(h_actual, h_actual, h_actual),
+        rcuts=rcuts,
+        angular_basis=angular_basis,
+        l_max=l_max,
+        eval_indices=eval_indices,
+        periodic=periodic,
+        radial_basis=radial_basis,
+        radial_order=radial_order,
+        center=atom_center,
     )

@@ -68,6 +68,7 @@ from .scf.energy import EnergyComponents
 from .scf.driver import SCFResult, SwitchesFlags
 from .xc.functional_requirements import get_functional_requirements
 from .xc.ml_xc import MLXCCalculator
+from .descriptors import DescriptorCalculator, DescriptorContext
 
 # Get parallelization-related variables from package __init__ (avoid circular import)
 # These are defined in atom/__init__.py but we access them via sys.modules to avoid import issues
@@ -278,6 +279,16 @@ ML_XC_CALCULATOR_NOT_MLXCCALCULATOR_ERROR = \
     "parameter 'ml_xc_calculator' must be a MLXCCalculator, get {} instead."
 ML_EACH_SCF_STEP_NOT_BOOL_ERROR = \
     "parameter 'ml_each_scf_step' must be a boolean, get {} instead."
+DESCRIPTOR_CALCULATORS_NOT_LIST_ERROR = \
+    "parameter 'descriptor_calculators' must be a list or tuple, get {} instead."
+DESCRIPTOR_CALCULATOR_NOT_DESCRIPTORCALCULATOR_ERROR = \
+    "each descriptor calculator must be a DescriptorCalculator, get {} instead."
+DESCRIPTOR_CALCULATOR_NAME_NOT_STRING_ERROR = \
+    "descriptor calculator name must be a non-empty string, get {} instead."
+DESCRIPTOR_CALCULATOR_NAME_EMPTY_ERROR = \
+    "descriptor calculator name must be a non-empty string."
+DESCRIPTOR_CALCULATOR_DUPLICATE_NAME_ERROR = \
+    "descriptor calculator names must be unique, found duplicates: {}."
 
 ML_XC_CALCULATOR_TARGET_FUNCTIONAL_NOT_EQUAL_TO_XC_FUNCTIONAL_ERROR = \
     """
@@ -488,6 +499,7 @@ class AtomicDFTSolver:
     # Machine learning model parameters
     ml_xc_calculator                  : MLXCCalculator # ML XC calculator for ML XC energy correction
     ml_each_scf_step                  : bool           # Use ML XC at each SCF step instead of only final evaluation
+    descriptor_calculators            : list[DescriptorCalculator]  # Post-SCF descriptor calculators
 
 
     def __init__(self, 
@@ -530,8 +542,7 @@ class AtomicDFTSolver:
         verbose                           : Optional[bool]           = None,   # False by default
         ml_xc_calculator                  : Optional[MLXCCalculator] = None,   # None by default
         ml_each_scf_step                  : Optional[bool]           = None,   # False by default
-
-        mcsh_config                       : Optional[object]         = None,   # MCSHConfig or None
+        descriptor_calculators            : Optional[list[DescriptorCalculator] | tuple[DescriptorCalculator, ...]] = None,   # Post-SCF descriptor calculators
 
         # deprecated parameters
         print_debug                       : Optional[bool]           = None,   # Now changed to verbose
@@ -636,6 +647,12 @@ class AtomicDFTSolver:
             Machine learning model for XC calculations. Defaults to None.
         `ml_each_scf_step` : bool
             Use ML XC at each SCF step instead of only final evaluation. Defaults to False.
+
+        Descriptor post-processing parameters
+        -------------------------------------
+        `descriptor_calculators` : list[DescriptorCalculator]
+            Descriptor calculators to run after SCF on the converged density.
+            Results are returned under `descriptor_results`. Defaults to None.
         """
 
         # handle deprecated parameters
@@ -692,7 +709,7 @@ class AtomicDFTSolver:
         self.verbose                           = verbose
         self.ml_xc_calculator                  = ml_xc_calculator
         self.ml_each_scf_step                  = ml_each_scf_step
-        self.mcsh_config                       = mcsh_config
+        self.descriptor_calculators            = descriptor_calculators
 
         # set the default parameters, if not provided
         self.set_and_check_initial_parameters()
@@ -939,6 +956,30 @@ class AtomicDFTSolver:
             XC_FUNCTIONAL_NOT_STRING_ERROR.format(type(self.xc_functional))
         assert self.xc_functional in VALID_XC_FUNCTIONAL_LIST, \
             XC_FUNCTIONAL_NOT_IN_VALID_LIST_ERROR.format(VALID_XC_FUNCTIONAL_LIST, self.xc_functional)
+
+        # descriptor calculators
+        if self.descriptor_calculators is None:
+            self.descriptor_calculators = []
+        elif isinstance(self.descriptor_calculators, tuple):
+            self.descriptor_calculators = list(self.descriptor_calculators)
+        if not isinstance(self.descriptor_calculators, list):
+            raise TypeError(DESCRIPTOR_CALCULATORS_NOT_LIST_ERROR.format(type(self.descriptor_calculators)))
+        for calculator in self.descriptor_calculators:
+            if not isinstance(calculator, DescriptorCalculator):
+                raise TypeError(
+                    DESCRIPTOR_CALCULATOR_NOT_DESCRIPTORCALCULATOR_ERROR.format(type(calculator))
+                )
+            calculator_name = calculator.name
+            if not isinstance(calculator_name, str):
+                raise TypeError(
+                    DESCRIPTOR_CALCULATOR_NAME_NOT_STRING_ERROR.format(type(calculator_name))
+                )
+            if calculator_name == '':
+                raise ValueError(DESCRIPTOR_CALCULATOR_NAME_EMPTY_ERROR)
+        descriptor_names = [calculator.name for calculator in self.descriptor_calculators]
+        duplicate_names = sorted({name for name in descriptor_names if descriptor_names.count(name) > 1})
+        if duplicate_names:
+            raise ValueError(DESCRIPTOR_CALCULATOR_DUPLICATE_NAME_ERROR.format(duplicate_names))
 
 
         # use OEP flag
@@ -2138,16 +2179,15 @@ class AtomicDFTSolver:
             e_x_local, e_c_local = None, None
             e_x_local_on_uniform_grid, e_c_local_on_uniform_grid = None, None
 
-        # Phase 6b: Compute MCSH descriptors (if requested)
-        if self.mcsh_config is not None:
-            from .descriptors import MCSHCalculator
-            mcsh_calculator = MCSHCalculator(self.mcsh_config)
-            mcsh_result = mcsh_calculator.compute_from_radial(
-                r_quad=self.grid_data_standard.quadrature_nodes,
-                rho=scf_result.density_data.rho,
+        # Phase 6b: Compute descriptor post-processing results (if requested)
+        descriptor_results = {}
+        if self.descriptor_calculators:
+            descriptor_context = DescriptorContext(
+                quadrature_nodes = self.grid_data_standard.quadrature_nodes,
+                density          = scf_result.density_data.rho,
             )
-        else:
-            mcsh_result = None
+            for calculator in self.descriptor_calculators:
+                descriptor_results[calculator.name] = calculator.compute(descriptor_context)
 
         # Print debug information
         if self.verbose:
@@ -2187,7 +2227,7 @@ class AtomicDFTSolver:
             'full_orbitals'             : scf_result.full_orbitals,
             'full_l_terms'              : scf_result.full_l_terms,
             'intermediate_info'         : scf_result.intermediate_info,  # Intermediate information from SCF iterations
-            'mcsh_result'               : mcsh_result,
+            'descriptor_results'        : descriptor_results,
         }
         
         return final_result

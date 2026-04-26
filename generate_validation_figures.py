@@ -1,7 +1,8 @@
-"""Generate publication-quality MCSH validation figures for 7 atoms (H through O).
+"""Generate publication-quality multipole validation figures for 7 atoms (H through O).
 
-Runs the atom-DFT solver, computes MCSH descriptors with Heaviside and Legendre
-kernels, and produces 6 figures demonstrating descriptor behavior.
+Runs the atom-DFT solver, computes multipole descriptors with the MCSH angular
+basis and Heaviside/Legendre radial bases, and produces figures demonstrating
+descriptor behavior.
 
 Usage:
     micromamba run -n base python atom-main/atom-main/generate_validation_figures.py
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
@@ -28,7 +30,7 @@ OUT_DIR.mkdir(exist_ok=True)
 # ── imports from atom package ────────────────────────────────────────────────
 sys.path.insert(0, str(SCRIPT_DIR))
 from atom import AtomicDFTSolver
-from atom.descriptors import MCSHCalculator, MCSHConfig
+from atom.descriptors import MultipoleCalculator
 
 # ── atom definitions ─────────────────────────────────────────────────────────
 # (symbol, Z, n_valence for pseudopotential calc)
@@ -37,24 +39,24 @@ from atom.descriptors import MCSHCalculator, MCSHConfig
 # Be: Z_val = 4
 # C, N, O: frozen 1s2 core => Z_val = Z - 2
 ATOMS = [
-    ("H",  1, 1),
+    ("H", 1, 1),
     ("He", 2, 2),
     ("Li", 3, 3),
     ("Be", 4, 4),
-    ("C",  6, 4),
-    ("N",  7, 5),
-    ("O",  8, 6),
+    ("C", 6, 4),
+    ("N", 7, 5),
+    ("O", 8, 6),
 ]
 
 # colors for each atom (colorblind-friendly palette)
 COLORS = {
-    "H":  "#1f77b4",
+    "H": "#1f77b4",
     "He": "#ff7f0e",
     "Li": "#2ca02c",
     "Be": "#d62728",
-    "C":  "#9467bd",
-    "N":  "#8c564b",
-    "O":  "#e377c2",
+    "C": "#9467bd",
+    "N": "#8c564b",
+    "O": "#e377c2",
 }
 
 # ── solver / MCSH parameters ────────────────────────────────────────────────
@@ -73,24 +75,27 @@ BOX_SIZE = 16.0
 SPACING = 0.4
 
 # ── matplotlib style ─────────────────────────────────────────────────────────
-plt.rcParams.update({
-    "font.size": 11,
-    "axes.titlesize": 13,
-    "axes.labelsize": 12,
-    "legend.fontsize": 9,
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
-    "figure.dpi": 150,
-    "savefig.dpi": 150,
-    "axes.grid": False,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-})
+plt.rcParams.update(
+    {
+        "font.size": 11,
+        "axes.titlesize": 13,
+        "axes.labelsize": 12,
+        "legend.fontsize": 9,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "figure.dpi": 150,
+        "savefig.dpi": 150,
+        "axes.grid": False,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+    }
+)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def run_atom(symbol: str, Z: int) -> dict:
     """Run DFT solver and return result dict."""
@@ -98,14 +103,19 @@ def run_atom(symbol: str, Z: int) -> dict:
     return solver.solve()
 
 
-def compute_mcsh(result: dict, radial_type: str = "heaviside",
-                 radial_order: int = 0) -> dict:
+def compute_mcsh(
+    result: dict, radial_basis: str = "heaviside", radial_order: int = 0
+) -> dict:
     """Compute MCSH descriptors and return radial profile dict."""
-    cfg = MCSHConfig(
-        rcuts=RCUTS, l_max=L_MAX, box_size=BOX_SIZE, spacing=SPACING,
-        radial_type=radial_type, radial_order=radial_order,
+    calc = MultipoleCalculator(
+        angular_basis="mcsh",
+        rcuts=RCUTS,
+        l_max=L_MAX,
+        box_size=BOX_SIZE,
+        spacing=SPACING,
+        radial_basis=radial_basis,
+        radial_order=radial_order,
     )
-    calc = MCSHCalculator(cfg)
     mcsh_result = calc.compute_from_solver_result(result)
     profile = calc.extract_radial_profile(mcsh_result)
     return profile
@@ -120,6 +130,7 @@ def center_index(profile: dict) -> int:
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def main():
     t0 = time.time()
 
@@ -130,11 +141,13 @@ def main():
     legendre_profiles = {}  # keyed (symbol, order)
 
     for sym, Z, _ in ATOMS:
-        print(f"[{time.time()-t0:6.1f}s] Running {sym} (Z={Z}) ...", flush=True)
+        print(f"[{time.time() - t0:6.1f}s] Running {sym} (Z={Z}) ...", flush=True)
         res = run_atom(sym, Z)
         solver_results[sym] = res
         energies[sym] = res["energy"]
-        print(f"         Energy = {res['energy']:.6f} Ha, converged = {res['converged']}")
+        print(
+            f"         Energy = {res['energy']:.6f} Ha, converged = {res['converged']}"
+        )
 
         # Heaviside descriptors
         heaviside_profiles[sym] = compute_mcsh(res, "heaviside", 0)
@@ -147,7 +160,9 @@ def main():
         print(f"         Descriptors done.", flush=True)
 
     elapsed = time.time() - t0
-    print(f"\n[{elapsed:.1f}s] All atoms computed. Generating figures ...\n", flush=True)
+    print(
+        f"\n[{elapsed:.1f}s] All atoms computed. Generating figures ...\n", flush=True
+    )
 
     # ── Figure 1: Radial densities ───────────────────────────────────────
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -195,8 +210,15 @@ def main():
         l0 = prof["descriptors"][ci, :, 0]
         l1 = prof["descriptors"][ci, :, 1]
         ratio = np.where(np.abs(l0) > 1e-15, l1 / np.abs(l0), 0.0)
-        ax.semilogy(RCUTS, np.abs(ratio) + 1e-16, "o-", color=COLORS[sym],
-                    lw=1.5, ms=5, label=sym)
+        ax.semilogy(
+            RCUTS,
+            np.abs(ratio) + 1e-16,
+            "o-",
+            color=COLORS[sym],
+            lw=1.5,
+            ms=5,
+            label=sym,
+        )
     ax.axhline(0.01, color="gray", ls=":", lw=1, alpha=0.6, label="1% threshold")
     ax.set_xlabel("Cutoff Radius (Bohr)")
     ax.set_ylabel("|l=1 / l=0| ratio")
@@ -225,8 +247,14 @@ def main():
             r_lp = prof_lp["r"]
             desc_lp = prof_lp["descriptors"][:, rcut_idx, 0]
             sort_lp = np.argsort(r_lp)
-            ax.plot(r_lp[sort_lp], desc_lp[sort_lp], ls=ls, lw=1.5,
-                    label=f"LP{order}", color=clr)
+            ax.plot(
+                r_lp[sort_lp],
+                desc_lp[sort_lp],
+                ls=ls,
+                lw=1.5,
+                label=f"LP{order}",
+                color=clr,
+            )
 
         ax.set_title(f"{sym}")
         ax.set_xlabel("r (Bohr)")
@@ -276,8 +304,14 @@ def main():
         h_vals = prof_h["descriptors"][:, :, 0].ravel()
         lp_vals = prof_lp0["descriptors"][:, :, 0].ravel()
         max_diff = np.max(np.abs(h_vals - lp_vals))
-        ax.scatter(h_vals, lp_vals, s=6, alpha=0.5, color=COLORS[sym],
-                   label=f"max |diff| = {max_diff:.2e}")
+        ax.scatter(
+            h_vals,
+            lp_vals,
+            s=6,
+            alpha=0.5,
+            color=COLORS[sym],
+            label=f"max |diff| = {max_diff:.2e}",
+        )
         vmin = min(h_vals.min(), lp_vals.min())
         vmax = max(h_vals.max(), lp_vals.max())
         ax.plot([vmin, vmax], [vmin, vmax], "k--", lw=0.8, label="y = x")
