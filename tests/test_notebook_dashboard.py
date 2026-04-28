@@ -55,6 +55,15 @@ def test_queued_job_snapshots_complete_descriptor_config():
     assert calculator.rcuts == (0.5, 1.0)
 
 
+def test_project_root_falls_back_to_package_root(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+
+    resolved_root = AtomDFTDashboard._resolve_project_root(None)
+
+    assert (resolved_root / "atom" / "ui" / "notebook_dashboard.py").exists()
+    assert resolved_root != tmp_path
+
+
 def test_batch_updates_last_descriptor_metadata(monkeypatch):
     ui = AtomDFTDashboard()
     ui.include_descriptors.value = True
@@ -87,6 +96,38 @@ def test_batch_updates_last_descriptor_metadata(monkeypatch):
     assert ui.state["last_descriptor"] is fake_descriptor
     assert ui.state["last_descriptor_metadata"]["symbol"] == "H"
     assert ui.state["last_descriptor_metadata"]["descriptor_config"]["rcuts"] == (0.5,)
+
+
+def test_batch_status_reports_failed_jobs(monkeypatch):
+    ui = AtomDFTDashboard()
+    first_job = ui._collect_single_job()
+    second_job = ui._collect_single_job()
+    calls = {"count": 0}
+
+    def fake_run_job(job):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("boom")
+        result = {
+            "descriptor_results": {},
+            "converged": True,
+            "iterations": 1,
+            "rho_residual": 0.0,
+            "energy": -1.0,
+            "wall_time_seconds": 0.0,
+        }
+        ui._attach_result_metadata(result, job)
+        return object(), result, ""
+
+    monkeypatch.setattr(ui, "_run_job", fake_run_job)
+    monkeypatch.setattr(ui, "_plot_result", lambda result: None)
+    ui.state["queue"] = [first_job, second_job]
+
+    ui._run_queue()
+
+    assert ui.progress.bar_style == "warning"
+    assert "1 succeeded" in ui.status.value
+    assert "1 failed" in ui.status.value
 
 
 def test_export_uses_descriptor_metadata_not_current_widgets(tmp_path: Path):

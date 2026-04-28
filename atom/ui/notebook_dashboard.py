@@ -162,6 +162,10 @@ class AtomDFTDashboard:
         for candidate in cwd.parents:
             if (candidate / "atom").exists():
                 return candidate
+
+        package_root = Path(__file__).resolve().parents[2]
+        if (package_root / "atom").exists():
+            return package_root
         return cwd
 
     def _read_available_psp_atomic_numbers(self) -> set[int]:
@@ -1105,6 +1109,8 @@ class AtomDFTDashboard:
         self.state["last_descriptor"] = None
         self.state["last_descriptor_calculator"] = None
         self.state["last_descriptor_metadata"] = None
+        failed_jobs = 0
+        unconverged_jobs = 0
         rows = []
         for index, job in enumerate(jobs, start=1):
             self.status.value = f"<b>Running batch {index}/{len(jobs)}:</b> {job['label']}"
@@ -1125,7 +1131,10 @@ class AtomDFTDashboard:
                     f"{result.get('energy', float('nan')):.10f}",
                     f"{result.get('wall_time_seconds', float('nan')):.2f}",
                 ])
+                if not bool(result.get("converged", False)):
+                    unconverged_jobs += 1
             except Exception as exc:
+                failed_jobs += 1
                 rows.append([index, job["label"], "FAILED", "", "", "", repr(exc)])
             self.progress.value = index
             with self.queue_output:
@@ -1135,8 +1144,20 @@ class AtomDFTDashboard:
                     rows,
                 ))
 
-        self.progress.bar_style = "success"
-        self.status.value = f"<b>Batch finished.</b> Completed {len(jobs)} jobs."
+        successful_jobs = len(jobs) - failed_jobs - unconverged_jobs
+        if failed_jobs:
+            self.progress.bar_style = "danger" if failed_jobs == len(jobs) else "warning"
+        elif unconverged_jobs:
+            self.progress.bar_style = "warning"
+        else:
+            self.progress.bar_style = "success"
+
+        summary_parts = [f"{successful_jobs} succeeded"]
+        if unconverged_jobs:
+            summary_parts.append(f"{unconverged_jobs} unconverged")
+        if failed_jobs:
+            summary_parts.append(f"{failed_jobs} failed")
+        self.status.value = f"<b>Batch finished:</b> {', '.join(summary_parts)}."
         if self.state.get("last_result") is not None:
             self._plot_result(self.state["last_result"])
 
