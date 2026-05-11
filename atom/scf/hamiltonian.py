@@ -259,7 +259,7 @@ class HamiltonianBuilder:
             if switches.use_metagga:
                 # Meta-GGA angular term: ∫ φ_i * (w * de_xc_dtau / r²) * φ_j dr
                 potential_angular = de_xc_dtau / self.ops_builder.quadrature_nodes**2
-                angular_term += self.ops_builder.build_potential_matrix(potential_angular)
+                angular_term = angular_term + self.ops_builder.build_potential_matrix(potential_angular)
 
             H += (l * (l + 1) / 2) * angular_term
         
