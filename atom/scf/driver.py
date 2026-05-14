@@ -870,20 +870,43 @@ class SCFResult:
         SCFResult
             Result object
         """
+        def _get_value(*keys: str):
+            for key in keys:
+                if key in result_dict:
+                    return result_dict[key]
+            raise KeyError("SCFResult dictionary missing required key(s): {}".format(keys))
+
+        raw_density_data = result_dict.get('density_data')
+        if isinstance(raw_density_data, DensityData):
+            density_data = raw_density_data
+        elif isinstance(raw_density_data, dict):
+            density_data = DensityData(
+                rho      = raw_density_data['rho'],
+                grad_rho = raw_density_data.get('grad_rho'),
+                tau      = raw_density_data.get('tau'),
+            )
+        else:
+            density_data = DensityData(
+                rho      = _get_value('rho'),
+                grad_rho = result_dict.get('grad_rho'),
+                tau      = result_dict.get('tau'),
+            )
+
         return cls(
-            eigenvalues         = result_dict['eigenvalues'],
-            eigenvectors        = result_dict['eigenvectors'],
-            rho                 = result_dict['rho'],
+            eigen_energies      = _get_value('eigen_energies', 'eigenvalues'),
+            orbitals            = _get_value('orbitals', 'eigenvectors'),
+            density_data        = density_data,
             converged           = result_dict['converged'],
             iterations          = result_dict['iterations'],
-            residual            = result_dict['residual'],
+            rho_residual        = _get_value('rho_residual', 'residual'),
             full_eigen_energies = result_dict.get('full_eigen_energies'),
             full_orbitals       = result_dict.get('full_orbitals'),
             full_l_terms        = result_dict.get('full_l_terms'),
             outer_iterations    = result_dict.get('outer_iterations'),
             outer_converged     = result_dict.get('outer_converged'),
             total_energy        = result_dict.get('total_energy'),
-            energy_components   = result_dict.get('energy_components')
+            energy_components   = result_dict.get('energy_components'),
+            intermediate_info   = result_dict.get('intermediate_info'),
         )
     
     def to_dict(self) -> dict:
@@ -896,12 +919,13 @@ class SCFResult:
             Dictionary representation of results
         """
         result = {
-            'eigenvalues' : self.eigenvalues,
-            'eigenvectors': self.eigenvectors,
-            'rho'         : self.rho,
-            'converged'   : self.converged,
-            'iterations'  : self.iterations,
-            'residual'    : self.residual
+            'eigen_energies': self.eigen_energies,
+            'orbitals'      : self.orbitals,
+            'density_data'  : self.density_data,
+            'rho'           : self.density_data.rho,
+            'converged'     : self.converged,
+            'iterations'    : self.iterations,
+            'rho_residual'  : self.rho_residual,
         }
         
         # Add optional fields if present
@@ -919,7 +943,9 @@ class SCFResult:
             result['total_energy'] = self.total_energy
         if self.energy_components is not None:
             result['energy_components'] = self.energy_components
-            
+        if self.intermediate_info is not None:
+            result['intermediate_info'] = self.intermediate_info
+
         return result
     
     def summary(self) -> str:
@@ -937,7 +963,7 @@ class SCFResult:
             "=" * 60,
             f"Inner SCF converged: {self.converged}",
             f"Inner iterations: {self.iterations}",
-            f"Final residual: {self.residual:.6e}",
+            f"Final residual: {self.rho_residual:.6e}",
         ]
         
         if self.outer_iterations is not None:
@@ -955,8 +981,8 @@ class SCFResult:
                 lines.append(f"  {key}: {value:.10f} Ha")
         
         lines.extend([
-            f"Number of states: {len(self.eigenvalues)}",
-            f"Lowest eigenvalue: {self.eigenvalues[0]:.6f} Ha",
+            f"Number of states: {len(self.eigen_energies)}",
+            f"Lowest eigenvalue: {self.eigen_energies[0]:.6f} Ha",
             "=" * 60
         ])
         
@@ -2498,4 +2524,3 @@ class SCFDriver:
         )
         
         return occ_eigenvalues, occ_orbitals, v_xc_ml
-        
