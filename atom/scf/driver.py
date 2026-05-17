@@ -1,5 +1,4 @@
 from __future__ import annotations
-from matplotlib import use
 import numpy as np
 import copy
 from typing import Dict, Any, Optional, Union, List, Tuple, Iterable, TYPE_CHECKING

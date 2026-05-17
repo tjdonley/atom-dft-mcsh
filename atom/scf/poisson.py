@@ -9,7 +9,6 @@ from __future__ import annotations
 import scipy
 import numpy as np
 from typing import Optional
-import matplotlib.pyplot as plt
 from ..mesh.operators import RadialOperatorsBuilder
 from ..mesh.builder import Mesh1D
 
