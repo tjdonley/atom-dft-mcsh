@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 
 
 
@@ -576,7 +578,7 @@ def get_fraction_occupation_states(n_electrons : float) -> Tuple[np.ndarray, np.
     """
 
     # Type checking
-    assert isinstance(n_electrons, int | float), \
+    assert isinstance(n_electrons, (int, float)), \
         N_ELECTRONS_NOT_INT_OR_FLOAT_ERROR.format(type(n_electrons))
     assert n_electrons > 0, \
         N_ELECTRONS_NOT_GREATER_THAN_0_ERROR.format(n_electrons)
@@ -862,6 +864,5 @@ if __name__ == "__main__":
             print(f"atomic_number = {atomic_number} is closed shell")
         else:
             pass
-
 
 

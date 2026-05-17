@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 __author__ = "Qihao Cheng"
 
 import os
@@ -172,7 +174,7 @@ VALID_WEIGHTS_MODES     = {"symlog", "density"}
 
 def format_error_message(e: Exception, context: str = "") -> Tuple[str, str]:
     """Format error message with type and enhanced context.
-    
+
     Args:
         e: Exception instance
         context: Additional context string
@@ -2740,4 +2742,3 @@ class AtomicDataManager:
         assert isinstance(smooth_kwargs, dict), \
             SMOOTH_KWARGS_NOT_DICT_ERROR.format(type(smooth_kwargs))
         self.default_smooth_kwargs = smooth_kwargs
-    

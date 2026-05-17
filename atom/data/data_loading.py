@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 __author__ = "Qihao Cheng"
 
 
