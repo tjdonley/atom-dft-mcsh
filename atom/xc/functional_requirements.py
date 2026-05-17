@@ -7,6 +7,8 @@ This module defines computational requirements for different XC functionals:
 - meta-GGA: needs density ρ, gradient |∇ρ|, and kinetic energy density τ
 """
 
+from __future__ import annotations
+
 from typing import Dict, Literal
 from dataclasses import dataclass
 
