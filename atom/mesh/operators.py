@@ -589,20 +589,28 @@ class RadialOperatorsBuilder:
         return S
 
 
-    def get_S_inv_sqrt(self) -> np.ndarray:
+    def get_S_inv_sqrt(self, exclude_boundary: bool = False) -> np.ndarray:
         """
         Inverse square root of the overlap matrix: S^(-1/2)
         Computed via eigendecomposition: S^(-1/2) = V * Λ^(-1/2) * V^T
+
+        Parameters
+        ----------
+        exclude_boundary : bool, optional
+            If True, compute the inverse square root of the interior overlap
+            matrix directly rather than slicing the full-grid inverse square
+            root.
         """
-        if hasattr(self, "_S_inv_sqrt"):
-            return self._S_inv_sqrt
+        cache_attr = "_S_inv_sqrt_interior" if exclude_boundary else "_S_inv_sqrt"
+        if hasattr(self, cache_attr):
+            return getattr(self, cache_attr)
         
-        S = self.get_S()
+        S = self.get_S(exclude_boundary=exclude_boundary)
         eigvals, eigvecs = np.linalg.eigh(S, UPLO='L')
         S_inv_sqrt = eigvecs @ np.diag(1.0 / np.sqrt(eigvals)) @ eigvecs.T
         S_inv_sqrt = 0.5 * (S_inv_sqrt + S_inv_sqrt.T)  # Symmetrize
         
-        self._S_inv_sqrt = S_inv_sqrt
+        setattr(self, cache_attr, S_inv_sqrt)
         return S_inv_sqrt
 
 
