@@ -280,10 +280,10 @@ class HamiltonianBuilder:
 
         # Apply symmetrization transformation (if requested)
         if symmetrize:
-            # Get S^(-1/2) from ops_builder
-            S_inv_sqrt = self.ops_builder.get_S_inv_sqrt()
-            if exclude_boundary:
-                S_inv_sqrt = S_inv_sqrt[1:-1,1:-1]
+            # Get S^(-1/2) for the same degrees of freedom as H.
+            S_inv_sqrt = self.ops_builder.get_S_inv_sqrt(
+                exclude_boundary = exclude_boundary
+            )
 
             # Transform: H → S^(-1/2) @ H @ S^(-1/2)
             H = S_inv_sqrt @ H @ S_inv_sqrt
@@ -329,8 +329,12 @@ class HamiltonianBuilder:
             EIGENVECTORS_MUST_BE_A_2D_ARRAY_ERROR.format(eigenvectors.ndim)
         
         if symmetrize:
-            S_inv_sqrt = self.ops_builder.get_S_inv_sqrt()
-            if pad_width > 0:
+            if pad_width == 0:
+                S_inv_sqrt = self.ops_builder.get_S_inv_sqrt()
+            elif pad_width == 1:
+                S_inv_sqrt = self.ops_builder.get_S_inv_sqrt(exclude_boundary=True)
+            else:
+                S_inv_sqrt = self.ops_builder.get_S_inv_sqrt()
                 S_inv_sqrt = S_inv_sqrt[pad_width:-pad_width,pad_width:-pad_width]
             eigenvectors = S_inv_sqrt @ eigenvectors
 
