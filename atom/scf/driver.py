@@ -1941,6 +1941,7 @@ class SCFDriver:
                 v_x_oep                 = v_x_oep,
                 v_c_oep                 = v_c_oep,
                 intermediate_info       = intermediate_info,
+                save_full_spectrum      = save_full_spectrum,
             )
             
             # update rho and orbitals

@@ -46,6 +46,47 @@ def test_save_intermediate_toggle_is_consistent():
     )
 
 
+@pytest.mark.parametrize(
+    "xc_functional, extra_kwargs",
+    [
+        ("PBE0", {"use_oep": False}),
+        ("HF", {"use_oep": False}),
+    ],
+)
+def test_save_full_spectrum_is_forwarded_through_outer_loop(
+    xc_functional, extra_kwargs
+):
+    solver = AtomicDFTSolver(
+        atomic_number=1,
+        domain_size=8.0,
+        finite_element_number=2,
+        polynomial_order=4,
+        quadrature_point_number=11,
+        mesh_type="polynomial",
+        mesh_concentration=2.0,
+        max_scf_iterations=1,
+        max_scf_iterations_outer=2,
+        scf_tolerance=1e-3,
+        use_pulay_mixing=False,
+        use_preconditioner=False,
+        verbose=False,
+        xc_functional=xc_functional,
+        all_electron_flag=False,
+        **extra_kwargs,
+    )
+
+    result = solver.solve(save_full_spectrum=True)
+
+    assert result["full_eigen_energies"] is not None
+    assert result["full_orbitals"] is not None
+    assert result["full_l_terms"] is not None
+    assert result["full_eigen_energies"].ndim == 1
+    assert result["full_orbitals"].ndim == 2
+    assert result["full_l_terms"].ndim == 1
+    assert result["full_orbitals"].shape[1] == result["full_eigen_energies"].shape[0]
+    assert result["full_l_terms"].shape == result["full_eigen_energies"].shape
+
+
 def test_pbe0_end_to_end():
     solver = AtomicDFTSolver(
         atomic_number=10,
